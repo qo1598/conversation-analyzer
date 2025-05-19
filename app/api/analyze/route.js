@@ -30,14 +30,11 @@ try {
   console.error('Firebase 초기화 오류:', error);
 }
 
-// formidable은 body parser를 비활성화해야 함
+// App Router에서는 bodyParser 설정이 다름
+// 이 부분은 middleware.ts에서 설정해야 할 수 있음
 export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb', // 최대 요청 크기를 50MB로 설정
-    },
-    responseLimit: false, // 응답 크기 제한 해제
-  },
+  runtime: 'nodejs',
+  maxDuration: 60, // 요청 처리 최대 시간 (초)
 }
 
 // 파일을 임시로 저장할 디렉토리
