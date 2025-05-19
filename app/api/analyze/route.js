@@ -33,7 +33,10 @@ try {
 // formidable은 body parser를 비활성화해야 함
 export const config = {
   api: {
-    bodyParser: false,
+    bodyParser: {
+      sizeLimit: '50mb', // 최대 요청 크기를 50MB로 설정
+    },
+    responseLimit: false, // 응답 크기 제한 해제
   },
 }
 
@@ -60,8 +63,31 @@ export async function POST(req) {
     console.log('- GEMINI_API_KEY 여부:', !!GEMINI_API_KEY);
     console.log('- CLOVA_API_KEY 여부:', !!CLOVA_API_KEY);
     
+    // 요청 크기 확인
+    const contentLength = req.headers.get('content-length');
+    console.log('요청 크기:', contentLength ? `${Math.round(contentLength / 1024 / 1024 * 100) / 100}MB` : '알 수 없음');
+    
+    // 파일 크기 제한 (50MB)
+    const MAX_SIZE = 50 * 1024 * 1024;
+    if (contentLength && parseInt(contentLength) > MAX_SIZE) {
+      return NextResponse.json(
+        { error: `파일 크기가 너무 큽니다. 최대 50MB까지 업로드 가능합니다. (현재: ${Math.round(contentLength / 1024 / 1024 * 100) / 100}MB)` },
+        { status: 413 }
+      );
+    }
+    
     // 파일 업로드 처리 - req.formData() 사용
-    const formData = await req.formData();
+    let formData;
+    try {
+      formData = await req.formData();
+    } catch (formError) {
+      console.error('FormData 파싱 오류:', formError);
+      return NextResponse.json(
+        { error: `요청 데이터 처리 중 오류가 발생했습니다: ${formError.message}` },
+        { status: 400 }
+      );
+    }
+    
     const audioFile = formData.get('audio');
     
     if (!audioFile) {
@@ -73,8 +99,18 @@ export async function POST(req) {
 
     // 임시 파일로 저장
     const filePath = path.join(UPLOAD_DIR, `upload_${Date.now()}${path.extname(audioFile.name) || '.tmp'}`);
-    const fileBuffer = Buffer.from(await audioFile.arrayBuffer());
-    fs.writeFileSync(filePath, fileBuffer);
+    
+    try {
+      const fileBuffer = Buffer.from(await audioFile.arrayBuffer());
+      fs.writeFileSync(filePath, fileBuffer);
+      console.log(`파일 저장 완료: ${filePath} (${fileBuffer.length} bytes)`);
+    } catch (fileError) {
+      console.error('파일 저장 오류:', fileError);
+      return NextResponse.json(
+        { error: `파일 저장 중 오류가 발생했습니다: ${fileError.message}` },
+        { status: 500 }
+      );
+    }
     
     let firebaseFileRef = null; // Firebase Storage 파일 참조 저장용
     
