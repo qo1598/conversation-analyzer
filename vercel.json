@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "functions": {
+    "api/analyze/*.js": {
+      "memory": 3008,
+      "maxDuration": 60
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/analyze",
+      "dest": "/api/analyze",
+      "methods": ["POST"],
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type"
+      }
+    }
+  ]
+} 
