@@ -1,88 +1,57 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { initializeApp } from 'firebase/app';
+import { getStorage, ref, uploadBytes } from 'firebase/storage';
 
-// 임시 디렉토리 설정
-const TMP_DIR = path.join(process.cwd(), 'tmp');
-const CHUNK_DIR = path.join(TMP_DIR, 'chunks');
+// Firebase 설정
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCMfOKrEe89G6jnlW2A-TwDeKe8FS_K1uY",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "conversation-analyzer-67e97.firebaseapp.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "conversation-analyzer-67e97",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "conversation-analyzer-67e97.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "919686543413",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:919686543413:web:2efd0b1ec412a53906197c",
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-31J910Q1ZF"
+};
 
 // App Router 설정
 export const config = {
-  runtime: 'nodejs',
-  maxDuration: 30, // 최대 30초
+  runtime: 'edge',
 };
 
-// POST 처리 함수
+// CORS 헤더 설정
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+// OPTIONS 메서드 처리 함수
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
+}
+
+// Firebase 초기화
+let firebaseApp;
+let firebaseStorage;
+
+try {
+  firebaseApp = initializeApp(firebaseConfig);
+  firebaseStorage = getStorage(firebaseApp);
+} catch (error) {
+  console.error('Firebase 초기화 오류:', error);
+}
+
+// 청크 업로드 API 비활성화
 export async function POST(req) {
-  try {
-    // 요청 본문 파싱 (multipart/form-data)
-    const formData = await req.formData();
-    const chunk = formData.get('chunk');
-    const sessionId = formData.get('sessionId');
-    const chunkIndex = formData.get('chunkIndex');
-    const totalChunks = formData.get('totalChunks');
-
-    if (!chunk || !sessionId || chunkIndex === undefined) {
-      return NextResponse.json(
-        { error: '필수 파라미터가 누락되었습니다.' },
-        { status: 400 }
-      );
-    }
-
-    // 세션 디렉토리 경로
-    const sessionDir = path.join(CHUNK_DIR, sessionId);
-    
-    // 세션 디렉토리가 없으면 오류
-    if (!fs.existsSync(sessionDir)) {
-      return NextResponse.json(
-        { error: '유효하지 않은 세션입니다. 먼저 업로드를 초기화해주세요.' },
-        { status: 400 }
-      );
-    }
-
-    // 세션 정보 읽기
-    const infoPath = path.join(sessionDir, 'info.json');
-    if (!fs.existsSync(infoPath)) {
-      return NextResponse.json(
-        { error: '세션 정보를 찾을 수 없습니다.' },
-        { status: 400 }
-      );
-    }
-
-    const sessionInfo = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
-    
-    // 청크 인덱스 검증
-    const chunkIndexNum = parseInt(chunkIndex);
-    if (isNaN(chunkIndexNum) || chunkIndexNum < 0 || chunkIndexNum >= sessionInfo.totalChunks) {
-      return NextResponse.json(
-        { error: '유효하지 않은 청크 인덱스입니다.' },
-        { status: 400 }
-      );
-    }
-
-    // 청크 파일 저장
-    const chunkPath = path.join(sessionDir, `chunk-${chunkIndexNum}`);
-    const fileBuffer = Buffer.from(await chunk.arrayBuffer());
-    fs.writeFileSync(chunkPath, fileBuffer);
-
-    // 청크 업로드 상태 업데이트
-    sessionInfo.chunks[chunkIndexNum] = true;
-    fs.writeFileSync(infoPath, JSON.stringify(sessionInfo, null, 2));
-
-    // 모든 청크가 업로드되었는지 확인
-    const allChunksUploaded = sessionInfo.chunks.every(chunk => chunk === true);
-
-    return NextResponse.json({
-      success: true,
-      message: `청크 ${chunkIndexNum + 1}/${totalChunks} 업로드 완료`,
-      chunkIndex: chunkIndexNum,
-      complete: allChunksUploaded
-    });
-  } catch (error) {
-    console.error('청크 업로드 오류:', error);
-    return NextResponse.json(
-      { error: `청크 업로드 실패: ${error.message}` },
-      { status: 500 }
-    );
-  }
+  console.log('청크 업로드 API는 더 이상 사용되지 않습니다. 새로운 업로드 방식을 사용하세요.');
+  
+  return NextResponse.json(
+    { 
+      error: '청크 업로드 API는 더 이상 사용되지 않습니다. 새로운 직접 업로드 방식을 사용하세요.' 
+    },
+    { status: 410, headers: corsHeaders }
+  );
 } 

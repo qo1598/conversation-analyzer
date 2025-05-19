@@ -1,12 +1,32 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import axios from 'axios'
+import { initializeApp } from 'firebase/app'
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+
+// Firebase 설정
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCMfOKrEe89G6jnlW2A-TwDeKe8FS_K1uY",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "conversation-analyzer-67e97.firebaseapp.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "conversation-analyzer-67e97",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "conversation-analyzer-67e97.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "919686543413",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:919686543413:web:2efd0b1ec412a53906197c",
+};
 
 // 최대 파일 크기 (40MB)
 const MAX_FILE_SIZE = 40 * 1024 * 1024;
-// 청크 크기 (4MB)
-const CHUNK_SIZE = 4 * 1024 * 1024;
+
+// Firebase 초기화
+let firebaseApp;
+let firebaseStorage;
+
+try {
+  firebaseApp = initializeApp(firebaseConfig);
+  firebaseStorage = getStorage(firebaseApp);
+} catch (error) {
+  console.error('Firebase 초기화 오류:', error);
+}
 
 export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onError }) {
   const [file, setFile] = useState(null)
@@ -71,85 +91,6 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
     setUploadProgress(0)
   }
 
-  // 파일을 청크 단위로 분할하여 업로드하는 함수
-  const uploadFileInChunks = async (file) => {
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    const fileType = file.type;
-    const fileName = file.name;
-    
-    try {
-      // 세션 ID 생성 (타임스탬프와 랜덤 문자열 조합)
-      const sessionId = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
-      
-      // 파일 업로드 초기화
-      const initResponse = await fetch('/api/analyze/init', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileName,
-          fileType,
-          fileSize: file.size,
-          totalChunks,
-          sessionId
-        }),
-      });
-      
-      if (!initResponse.ok) {
-        throw new Error(`업로드 초기화 오류: ${initResponse.status}`);
-      }
-      
-      const { success: initSuccess } = await initResponse.json();
-      
-      if (!initSuccess) {
-        throw new Error('업로드 초기화 실패');
-      }
-      
-      // 청크 단위로 업로드
-      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-        const start = chunkIndex * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
-        
-        const formData = new FormData();
-        formData.append('chunk', chunk);
-        formData.append('sessionId', sessionId);
-        formData.append('chunkIndex', chunkIndex.toString());
-        formData.append('totalChunks', totalChunks.toString());
-        
-        const chunkResponse = await fetch('/api/analyze/upload-chunk', {
-          method: 'POST',
-          body: formData,
-        });
-        
-        if (!chunkResponse.ok) {
-          throw new Error(`청크 업로드 오류: ${chunkResponse.status}`);
-        }
-        
-        // 진행 상태 업데이트
-        setUploadProgress(Math.round((chunkIndex + 1) / totalChunks * 100));
-      }
-      
-      // 모든 청크 업로드 완료 후 분석 시작
-      return fetch('/api/analyze/process', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sessionId,
-          fileName,
-          fileType,
-        }),
-      });
-      
-    } catch (error) {
-      console.error('파일 업로드 오류:', error);
-      throw error;
-    }
-  }
-
   const handleAnalyze = async () => {
     if (!file) {
       onError('분석할 파일을 먼저 업로드해주세요')
@@ -160,56 +101,65 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
     setUploading(true)
 
     try {
-      // 파일 크기가 4MB 미만이면 직접 업로드
-      if (file.size < CHUNK_SIZE) {
-        const formData = new FormData()
-        formData.append('audio', file)
-
-        const response = await fetch('/api/analyze', {
-          method: 'POST',
-          body: formData,
-        })
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('서버 오류 응답:', response.status, errorText);
-          throw new Error(`서버 응답 오류: ${response.status}`)
+      // 1. Firebase Storage에 직접 업로드
+      setUploadProgress(10);
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `audio_${Date.now()}.${fileExt}`;
+      const storageRef = ref(firebaseStorage, `uploads/${fileName}`);
+      
+      console.log('Firebase Storage에 직접 업로드 시작...');
+      
+      // Firebase에 파일 업로드
+      const fileBuffer = await file.arrayBuffer();
+      setUploadProgress(30);
+      
+      await uploadBytes(storageRef, fileBuffer, {
+        contentType: file.type,
+        customMetadata: {
+          originalName: file.name,
+          fileSize: file.size.toString(),
+          uploadTime: new Date().toISOString()
         }
-        
-        const data = await response.json()
-        setUploading(false)
+      });
+      
+      setUploadProgress(60);
+      
+      // 업로드된 파일의 URL 획득
+      const audioUrl = await getDownloadURL(storageRef);
+      
+      setUploadProgress(70);
+      console.log('Firebase에 파일 업로드 완료, URL:', audioUrl);
+      
+      // 2. API 호출하여 분석 진행
+      const response = await fetch('/api/analyze/simple', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ audioUrl })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`서버 응답 오류: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setUploading(false);
+      setUploadProgress(100);
 
-        if (data) {
-          onAnalysisComplete(data)
-        } else {
-          onError('응답 데이터가 없습니다.')
-        }
+      if (data) {
+        onAnalysisComplete(data);
       } else {
-        // 파일 크기가 크면 청크 단위로 분할하여 업로드
-        const response = await uploadFileInChunks(file);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('서버 오류 응답:', response.status, errorText);
-          throw new Error(`서버 응답 오류: ${response.status}`)
-        }
-        
-        const data = await response.json()
-        setUploading(false)
-
-        if (data) {
-          onAnalysisComplete(data)
-        } else {
-          onError('응답 데이터가 없습니다.')
-        }
+        onError('응답 데이터가 없습니다.');
       }
     } catch (error) {
-      setUploading(false)
-      console.error('분석 오류:', error)
-      onError(error.message || '파일 분석 중 오류가 발생했습니다.')
+      setUploading(false);
+      console.error('분석 오류:', error);
+      onError(error.message || '파일 분석 중 오류가 발생했습니다.');
     }
   }
-
+  
   return (
     <div className="w-full">
       <div 

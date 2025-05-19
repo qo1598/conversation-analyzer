@@ -10,10 +10,18 @@ const nextConfig = {
   
   // Vercel에서 큰 파일 업로드를 위한 설정
   experimental: {
-    serverComponentsExternalPackages: ['formidable', 'firebase'],
-    outputFileTracingIgnores: ['**firebase**', '**formidable**'],
+    // 다른 실험적 옵션들
   },
-
+  
+  // Next.js 15.3.2에서 업데이트된 설정
+  serverExternalPackages: ['formidable', 'firebase'],
+  
+  // 파일 추적 제외 설정 (루트 레벨로 이동)
+  outputFileTracingExcludes: {
+    '**/node_modules/firebase/**': ['*'],
+    '**/node_modules/formidable/**': ['*']
+  },
+  
   // API 요청 크기 제한 늘리기를 위한 Vercel 설정
   serverRuntimeConfig: {
     api: {
