@@ -5,13 +5,8 @@ const nextConfig = {
   env: {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   },
-  // API 요청 크기 제한 늘리기
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb', // 최대 요청 크기를 50MB로 설정
-    },
-    responseLimit: false, // 응답 크기 제한 해제
-  },
+  // Next.js 13 이상에서는 app 라우터에 api 구성을 사용하지 않음
+  // 대신 옵션으로 처리
 }
 
 module.exports = nextConfig 
