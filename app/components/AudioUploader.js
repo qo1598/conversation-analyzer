@@ -1,32 +1,9 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { initializeApp } from 'firebase/app'
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-
-// Firebase 설정
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCMfOKrEe89G6jnlW2A-TwDeKe8FS_K1uY",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "conversation-analyzer-67e97.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "conversation-analyzer-67e97",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "conversation-analyzer-67e97.firebasestorage.app",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "919686543413",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:919686543413:web:2efd0b1ec412a53906197c",
-};
 
 // 최대 파일 크기 (40MB)
 const MAX_FILE_SIZE = 40 * 1024 * 1024;
-
-// Firebase 초기화
-let firebaseApp;
-let firebaseStorage;
-
-try {
-  firebaseApp = initializeApp(firebaseConfig);
-  firebaseStorage = getStorage(firebaseApp);
-} catch (error) {
-  console.error('Firebase 초기화 오류:', error);
-}
 
 export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onError }) {
   const [file, setFile] = useState(null)
@@ -101,44 +78,20 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
     setUploading(true)
 
     try {
-      // 1. Firebase Storage에 직접 업로드
-      setUploadProgress(10);
+      // API 호출하여 분석 진행
+      setUploadProgress(20);
       
-      const fileExt = file.name.split('.').pop();
-      const fileName = `audio_${Date.now()}.${fileExt}`;
-      const storageRef = ref(firebaseStorage, `uploads/${fileName}`);
+      const formData = new FormData();
+      formData.append('audio', file);
       
-      console.log('Firebase Storage에 직접 업로드 시작...');
+      setUploadProgress(40);
       
-      // Firebase에 파일 업로드
-      const fileBuffer = await file.arrayBuffer();
-      setUploadProgress(30);
-      
-      await uploadBytes(storageRef, fileBuffer, {
-        contentType: file.type,
-        customMetadata: {
-          originalName: file.name,
-          fileSize: file.size.toString(),
-          uploadTime: new Date().toISOString()
-        }
-      });
-      
-      setUploadProgress(60);
-      
-      // 업로드된 파일의 URL 획득
-      const audioUrl = await getDownloadURL(storageRef);
-      
-      setUploadProgress(70);
-      console.log('Firebase에 파일 업로드 완료, URL:', audioUrl);
-      
-      // 2. API 호출하여 분석 진행
-      const response = await fetch('/api/analyze/simple', {
+      const response = await fetch('/api/analyze', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ audioUrl })
+        body: formData
       });
+      
+      setUploadProgress(80);
       
       if (!response.ok) {
         throw new Error(`서버 응답 오류: ${response.status}`);

@@ -4,6 +4,7 @@ const nextConfig = {
   // 환경 변수 설정
   env: {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    DAGLO_API_KEY: process.env.DAGLO_API_KEY
   },
   // Next.js 13 이상에서는 app 라우터에 api 구성을 사용하지 않음
   // 대신 옵션으로 처리
@@ -41,6 +42,22 @@ const nextConfig = {
         pathname: '**',
       },
     ],
+  },
+  
+  // 웹팩 설정 최적화
+  webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
+    // Firebase 관련 모듈에 대한 예외 처리
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+      };
+    }
+    
+    return config;
   },
 }
 
