@@ -11,7 +11,7 @@ const nextConfig = {
   
   // Vercel에서 큰 파일 업로드를 위한 설정
   experimental: {
-    // 다른 실험적 옵션들
+    serverComponentsExternalPackages: ['@google-cloud/speech']
   },
   
   // Next.js 15.3.2에서 업데이트된 설정
@@ -54,10 +54,53 @@ const nextConfig = {
         net: false,
         tls: false,
         crypto: false,
+        stream: false,
+        url: false,
+        zlib: false,
+        http: false,
+        https: false,
+        assert: false,
+        os: false,
+        path: false,
+        punycode: false,
+        process: false,
+        querystring: false,
+        util: false,
+        buffer: false,
+        events: false,
       };
     }
     
     return config;
+  },
+  // API 응답 크기 제한 (100MB)
+  api: {
+    bodyParser: {
+      sizeLimit: '100mb',
+    },
+    responseLimit: '100mb',
+  },
+  // CORS 헤더 추가
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: '*',
+          },
+          {
+            key: 'Access-Control-Allow-Methods',
+            value: 'GET, POST, PUT, DELETE, OPTIONS',
+          },
+          {
+            key: 'Access-Control-Allow-Headers',
+            value: 'Content-Type, Authorization, apikey, x-client-info',
+          },
+        ],
+      },
+    ];
   },
 }
 
