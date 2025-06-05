@@ -25,7 +25,7 @@
   ],
   "functions": {
     "app/api/**/*.js": {
-      "maxDuration": 300
+      "maxDuration": 60
     }
   },
   "rewrites": [
