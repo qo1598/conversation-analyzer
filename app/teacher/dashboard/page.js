@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { authAPI, sessionAPI } from '../../../lib/supabase'
 
 export default function TeacherDashboard() {
   const router = useRouter()
@@ -14,23 +15,30 @@ export default function TeacherDashboard() {
 
   useEffect(() => {
     setMounted(true)
+    checkAuthAndLoadData()
+  }, [router])
+
+  const checkAuthAndLoadData = async () => {
     // 로그인 체크
-    const teacherData = localStorage.getItem('teacher')
-    if (!teacherData) {
+    const { success, data } = await authAPI.getCurrentUser()
+    if (!success || !data) {
       router.push('/teacher/login')
       return
     }
-    setTeacher(JSON.parse(teacherData))
+    
+    setTeacher(data)
 
-    // 기존 세션 불러오기
-    const savedSessions = localStorage.getItem('sessions')
-    if (savedSessions) {
-      setSessions(JSON.parse(savedSessions))
+    // 세션 데이터 불러오기
+    await loadSessions()
+  }
+
+  const loadSessions = async () => {
+    const { success, data } = await sessionAPI.getTeacherSessions()
+    if (success) {
+      setSessions(data || [])
+    } else {
+      console.error('세션 로드 실패')
     }
-  }, [router])
-
-  const generateSessionCode = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString()
   }
 
   const createSession = async () => {
@@ -41,39 +49,37 @@ export default function TeacherDashboard() {
 
     setLoading(true)
     try {
-      const newSession = {
-        id: Date.now().toString(),
-        name: newSessionName,
-        code: generateSessionCode(),
-        teacher: teacher.email,
-        createdAt: new Date().toISOString(),
-        status: 'active',
-        recordings: []
-      }
-
-      const updatedSessions = [...sessions, newSession]
-      setSessions(updatedSessions)
-      localStorage.setItem('sessions', JSON.stringify(updatedSessions))
+      const { success, data, error } = await sessionAPI.createSession(newSessionName)
       
-      setNewSessionName('')
-      setShowCreateModal(false)
+      if (success) {
+        await loadSessions() // 세션 목록 새로고침
+        setNewSessionName('')
+        setShowCreateModal(false)
+        alert(`세션이 생성되었습니다! 코드: ${data.code}`)
+      } else {
+        alert(`세션 생성 실패: ${error}`)
+      }
     } catch (error) {
+      console.error('세션 생성 오류:', error)
       alert('세션 생성 중 오류가 발생했습니다.')
     } finally {
       setLoading(false)
     }
   }
 
-  const deleteSession = (sessionId) => {
+  const deleteSession = async (sessionId) => {
     if (confirm('정말로 이 세션을 삭제하시겠습니까?')) {
-      const updatedSessions = sessions.filter(s => s.id !== sessionId)
-      setSessions(updatedSessions)
-      localStorage.setItem('sessions', JSON.stringify(updatedSessions))
+      const { success } = await sessionAPI.deleteSession(sessionId)
+      if (success) {
+        await loadSessions() // 세션 목록 새로고침
+      } else {
+        alert('세션 삭제에 실패했습니다.')
+      }
     }
   }
 
-  const logout = () => {
-    localStorage.removeItem('teacher')
+  const logout = async () => {
+    await authAPI.signOut()
     if (mounted) {
       router.push('/')
     }
@@ -237,7 +243,7 @@ export default function TeacherDashboard() {
                             코드: <span className="font-mono font-bold text-lg text-blue-600">{session.code}</span>
                           </span>
                           <span className="mr-4">
-                            생성일: {new Date(session.createdAt).toLocaleDateString()}
+                            생성일: {new Date(session.created_at).toLocaleDateString()}
                           </span>
                           <span className={`px-2 py-1 rounded-full text-xs ${
                             session.status === 'active' 
@@ -248,6 +254,7 @@ export default function TeacherDashboard() {
                           </span>
                         </div>
                       </div>
+                      
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => copyToClipboard(session.code)}

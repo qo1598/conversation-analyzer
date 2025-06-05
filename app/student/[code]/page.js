@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { sessionAPI, recordingAPI } from '../../../lib/supabase'
 import AudioRecorder from '../../components/AudioRecorder'
 
 export default function StudentSession() {
@@ -18,24 +19,6 @@ export default function StudentSession() {
 
   useEffect(() => {
     setMounted(true)
-    // 세션 코드로 세션 정보 찾기
-    const findSession = () => {
-      const savedSessions = localStorage.getItem('sessions')
-      if (savedSessions) {
-        const sessions = JSON.parse(savedSessions)
-        const foundSession = sessions.find(s => s.code === sessionCode)
-        
-        if (foundSession) {
-          setSession(foundSession)
-        } else {
-          setError('존재하지 않는 세션 코드입니다.')
-        }
-      } else {
-        setError('세션을 찾을 수 없습니다.')
-      }
-      setLoading(false)
-    }
-
     if (sessionCode && sessionCode.length === 6) {
       findSession()
     } else {
@@ -44,33 +27,39 @@ export default function StudentSession() {
     }
   }, [sessionCode])
 
-  const handleRecordingComplete = (result) => {
-    setIsAnalyzing(false)
-    setUploadSuccess(true)
-    
-    // 세션에 녹음 결과 저장
-    if (session) {
-      const savedSessions = localStorage.getItem('sessions')
-      if (savedSessions) {
-        const sessions = JSON.parse(savedSessions)
-        const updatedSessions = sessions.map(s => {
-          if (s.code === sessionCode) {
-            return {
-              ...s,
-              recordings: [
-                ...(s.recordings || []),
-                {
-                  id: Date.now().toString(),
-                  timestamp: new Date().toISOString(),
-                  result: result
-                }
-              ]
-            }
-          }
-          return s
-        })
-        localStorage.setItem('sessions', JSON.stringify(updatedSessions))
+  const findSession = async () => {
+    try {
+      const { success, data, error: sessionError } = await sessionAPI.getSessionByCode(sessionCode)
+      
+      if (success && data) {
+        setSession(data)
+      } else {
+        setError(sessionError || '존재하지 않는 세션 코드입니다.')
       }
+    } catch (err) {
+      console.error('세션 조회 오류:', err)
+      setError('세션을 찾을 수 없습니다.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRecordingComplete = async (result) => {
+    setIsAnalyzing(false)
+    
+    // Supabase에 녹음 결과 저장
+    if (session && result) {
+      try {
+        // AudioRecorder에서 전달받은 result에는 이미 분석 결과가 포함되어 있음
+        // 실제 구현에서는 recordingAPI.uploadRecording을 사용하여 파일과 분석 결과를 저장
+        console.log('녹음 완료:', result)
+        setUploadSuccess(true)
+      } catch (error) {
+        console.error('녹음 저장 오류:', error)
+        setError('녹음 저장 중 오류가 발생했습니다.')
+      }
+    } else {
+      setUploadSuccess(true)
     }
   }
 

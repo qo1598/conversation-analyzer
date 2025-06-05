@@ -2,23 +2,33 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { authAPI } from '../../../lib/supabase'
 
 export default function TeacherLogin() {
   const router = useRouter()
-  const [mounted, setMounted] = useState(false)
   const [isLogin, setIsLogin] = useState(true)
   const [formData, setFormData] = useState({
+    name: '',
     email: '',
     password: '',
-    name: '',
     confirmPassword: ''
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
+    // 이미 로그인되어 있는지 확인
+    checkExistingAuth()
   }, [])
+
+  const checkExistingAuth = async () => {
+    const { success, data } = await authAPI.getCurrentUser()
+    if (success && data) {
+      router.push('/teacher/dashboard')
+    }
+  }
 
   const handleInputChange = (e) => {
     setFormData({
@@ -47,29 +57,35 @@ export default function TeacherLogin() {
           setLoading(false)
           return
         }
-      }
 
-      // 임시 로그인 처리 (실제 구현시에는 백엔드 API 호출)
-      if (isLogin) {
-        // 로그인 로직
-        if (formData.email && formData.password) {
-          localStorage.setItem('teacher', JSON.stringify({
-            email: formData.email,
-            name: formData.name || formData.email.split('@')[0]
-          }))
-          router.push('/teacher/dashboard')
+        // Supabase 회원가입
+        const { success, error: signUpError } = await authAPI.signUp(
+          formData.email, 
+          formData.password, 
+          formData.name
+        )
+
+        if (success) {
+          alert('회원가입이 완료되었습니다. 이메일을 확인해주세요.')
+          setIsLogin(true) // 로그인 탭으로 전환
         } else {
-          setError('이메일과 비밀번호를 입력해주세요.')
+          setError(signUpError || '회원가입 중 오류가 발생했습니다.')
         }
       } else {
-        // 회원가입 로직
-        localStorage.setItem('teacher', JSON.stringify({
-          email: formData.email,
-          name: formData.name
-        }))
-        router.push('/teacher/dashboard')
+        // Supabase 로그인
+        const { success, data, error: signInError } = await authAPI.signIn(
+          formData.email, 
+          formData.password
+        )
+
+        if (success && data.user) {
+          router.push('/teacher/dashboard')
+        } else {
+          setError(signInError || '이메일 또는 비밀번호가 올바르지 않습니다.')
+        }
       }
     } catch (err) {
+      console.error('인증 오류:', err)
       setError('로그인 중 오류가 발생했습니다.')
     } finally {
       setLoading(false)
@@ -215,13 +231,11 @@ export default function TeacherLogin() {
             </button>
           </form>
 
-          {isLogin && (
-            <div className="mt-6 text-center">
-              <p className="text-sm text-gray-600">
-                데모용 계정: 아무 이메일과 비밀번호로 로그인 가능
-              </p>
-            </div>
-          )}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              실제 Supabase 계정으로 로그인됩니다
+            </p>
+          </div>
         </div>
       </div>
     </div>

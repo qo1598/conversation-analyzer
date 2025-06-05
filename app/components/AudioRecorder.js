@@ -121,7 +121,7 @@ export default function AudioRecorder({ onRecordingComplete, onError, onAnalysis
       const formData = new FormData()
       formData.append('audio', audioBlob, 'recording.webm')
       
-      const response = await fetch('/api/analyze/mock', {
+      const response = await fetch('/api/analyze', {
         method: 'POST',
         body: formData
       })
