@@ -24,7 +24,7 @@ export default function ConversationAnalysis({ data }) {
 
   return (
     <div className="bg-white shadow-md rounded-lg p-6">
-      <h2 className="text-2xl font-semibold mb-6">분석 결과</h2>
+      <h2 className="text-xl font-semibold mb-6">분석 결과</h2>
 
       <div className="mb-6">
         <div className="border-b border-gray-200">
@@ -182,7 +182,7 @@ export default function ConversationAnalysis({ data }) {
                         ></div>
                       </div>
                       <span className="ml-3 text-sm font-medium text-blue-600 w-12">
-                        {Math.round(criterion.score * 100)}%
+                        {Math.round(criterion.score * 100)}점
                       </span>
                     </div>
                     <p className="text-sm text-gray-700 leading-relaxed">{criterion.feedback}</p>
@@ -247,7 +247,7 @@ export default function ConversationAnalysis({ data }) {
                             ></div>
                           </div>
                           <span className="ml-3 text-sm font-medium text-green-600 w-12">
-                            {Math.round(criterion.score * 100)}%
+                            {Math.round(criterion.score * 100)}점
                           </span>
                         </div>
                         <p className="text-sm text-gray-700 leading-relaxed">{criterion.feedback}</p>
@@ -308,7 +308,7 @@ export default function ConversationAnalysis({ data }) {
                         ></div>
                       </div>
                       <span className="ml-3 text-sm font-medium text-purple-600 w-12">
-                        {Math.round(criterion.score * 100)}%
+                        {Math.round(criterion.score * 100)}점
                       </span>
                     </div>
                     <p className="text-sm text-gray-700 leading-relaxed">{criterion.feedback}</p>
