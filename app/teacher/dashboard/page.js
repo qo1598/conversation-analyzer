@@ -95,11 +95,6 @@ export default function TeacherDashboard() {
     }
   }
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text)
-    alert('세션 코드가 클립보드에 복사되었습니다!')
-  }
-
   const navigateToSession = (sessionId) => {
     if (mounted) {
       router.push(`/teacher/session/${sessionId}`)
@@ -266,13 +261,6 @@ export default function TeacherDashboard() {
                       </div>
                       
                       <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => copyToClipboard(session.code)}
-                          className="px-3 py-2 text-sm text-blue-600 hover:text-blue-800"
-                          title="코드 복사"
-                        >
-                          복사
-                        </button>
                         <button
                           onClick={() => navigateToSession(session.id)}
                           className="px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
