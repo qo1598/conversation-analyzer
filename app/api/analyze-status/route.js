@@ -278,67 +278,57 @@ function convertDagloResults(dagloResult) {
   }
 }
 
-// 간단한 Gemini API 대화 분석 함수
+// 완전한 Gemini API 대화 분석 함수
 async function analyzeConversation(transcript, speakers) {
   try {
     if (!GEMINI_API_KEY) {
       throw new Error('Gemini API 키가 설정되지 않았습니다.');
     }
     
-    console.log('Gemini API 분석 시작...');
+    console.log('Gemini API 종합 분석 시작...');
     
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    // 간단한 전체 분석만 수행
-    const limitedTranscript = transcript.slice(0, 20);
+    // 전체 대화 텍스트 생성 (처음 30개 세그먼트만 사용)
+    const limitedTranscript = transcript.slice(0, 30);
     const conversationText = limitedTranscript
       .map(item => `${speakers[item.speaker]?.name || `화자 ${item.speaker}`}: ${item.text}`)
       .join('\n');
 
-    const prompt = `
-다음 대화를 분석하고 간단한 평가를 해주세요:
+    // 화자별 대화 분리
+    const speakerTexts = {};
+    Object.keys(speakers).forEach(speakerId => {
+      speakerTexts[speakerId] = limitedTranscript
+        .filter(item => item.speaker === speakerId)
+        .map(item => item.text)
+        .join(' ');
+    });
 
-${conversationText}
+    console.log('화자별 텍스트 분리 완료:', Object.keys(speakerTexts));
 
-다음 JSON 형식으로 응답해주세요:
-{
-  "overall": {
-    "criteria": [
-      {"name": "의사소통 명확성", "score": 0.8, "feedback": "명확하게 의사소통했습니다"},
-      {"name": "적극적 경청", "score": 0.7, "feedback": "서로의 의견을 잘 들었습니다"}
-    ],
-    "summary": "전체적으로 좋은 대화였습니다"
-  }
-}
-`;
-
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    // 1. 전체 대화 분석
+    const overallAnalysis = await analyzeOverallConversation(model, conversationText);
     
-    try {
-      const cleanText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        console.log('Gemini 분석 완료');
-        return parsed;
+    // 2. 화자별 개별 분석
+    const speakerAnalyses = {};
+    for (const [speakerId, speakerText] of Object.entries(speakerTexts)) {
+      if (speakerText.trim()) {
+        speakerAnalyses[speakerId] = await analyzeSpeakerIndividually(
+          model, 
+          speakerText, 
+          speakers[speakerId]?.name || `화자 ${speakerId}`
+        );
       }
-    } catch (parseError) {
-      console.error('Gemini 응답 파싱 오류:', parseError);
     }
-    
-    // 파싱 실패 시 기본 응답
+
+    // 3. 화자간 상호작용 분석
+    const interactionAnalysis = await analyzeInteraction(model, conversationText, Object.keys(speakers));
+
     return {
-      overall: {
-        criteria: [
-          { name: "의사소통 명확성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
-          { name: "적극적 경청", score: 0.7, feedback: "분석 중 오류가 발생했습니다." }
-        ],
-        summary: "분석을 완료했지만 상세 결과 생성 중 오류가 발생했습니다."
-      },
-      speakers: {},
-      interaction: { criteria: [], summary: "", recommendations: [] }
+      overall: overallAnalysis,
+      speakers: speakerAnalyses,
+      interaction: interactionAnalysis
     };
 
   } catch (error) {
@@ -346,15 +336,206 @@ ${conversationText}
     
     // 오류 발생 시 기본 응답 반환
     return {
-      overall: {
-        criteria: [
-          { name: "의사소통 명확성", score: 0.7, feedback: "API 오류로 분석할 수 없습니다." },
-          { name: "적극적 경청", score: 0.7, feedback: "API 오류로 분석할 수 없습니다." }
-        ],
-        summary: "API 오류로 인해 분석을 완료할 수 없었습니다."
-      },
-      speakers: {},
-      interaction: { criteria: [], summary: "", recommendations: [] }
+      overall: getDefaultOverallAnalysis(),
+      speakers: getDefaultSpeakerAnalyses(speakers),
+      interaction: getDefaultInteractionAnalysis()
     };
   }
+}
+
+// 전체 대화 분석 함수
+async function analyzeOverallConversation(model, conversationText) {
+  const prompt = `
+다음은 회의 대화 내용입니다. 이 대화를 다음 기준에 따라 분석하고 평가해주세요:
+
+1. 의사소통 명확성: 화자들이 얼마나 명확하게 의사를 전달했는지
+2. 적극적 경청: 화자들이 서로의 의견을 경청하고 반응했는지  
+3. 회의 효율성: 대화가 효율적으로 진행되었는지
+4. 문제 해결 능력: 문제 제기와 해결책 제시가 적절했는지
+5. 협력도: 화자들이 협력적으로 대화했는지
+
+각 기준별로 0.0에서 1.0 사이의 점수와 짧은 피드백을 제공해주세요.
+마지막으로 전체적인 대화 평가를 요약해주세요.
+
+**중요: 모든 피드백과 요약은 정중한 어조로 '~합니다', '~됩니다' 형태의 종결어미를 사용해주세요.**
+
+응답은 다음과 같은 JSON 형식으로 제공해주세요:
+{
+  "criteria": [
+    {
+      "name": "기준명",
+      "score": 점수(0.0~1.0),
+      "feedback": "피드백 내용"
+    }
+  ],
+  "summary": "전체 평가 요약"
+}
+
+대화 내용:
+${conversationText}
+`;
+
+  const result = await model.generateContent(prompt);
+  const responseText = result.response.text();
+  
+  try {
+    const cleanText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    throw new Error('JSON 형식을 찾을 수 없습니다.');
+  } catch (parseError) {
+    console.error('전체 분석 JSON 파싱 오류:', parseError);
+    return getDefaultOverallAnalysis();
+  }
+}
+
+// 화자별 개별 분석 함수
+async function analyzeSpeakerIndividually(model, speakerText, speakerName) {
+  const prompt = `
+다음은 "${speakerName}"의 발화 내용입니다. 이 화자의 커뮤니케이션 스타일과 특성을 분석해주세요:
+
+1. 발화 명확성: 말하는 내용이 얼마나 명확하고 이해하기 쉬운지
+2. 논리성: 발언의 논리적 구조와 일관성
+3. 적극성: 대화에 얼마나 적극적으로 참여하는지
+4. 전문성: 주제에 대한 이해도와 전문적 지식
+5. 감정 조절: 감정적으로 안정된 대화를 하는지
+
+각 기준별로 0.0에서 1.0 사이의 점수와 짧은 피드백을 제공해주세요.
+마지막으로 이 화자의 커뮤니케이션 특성을 요약해주세요.
+
+**중요: 모든 피드백, 요약, 강점, 개선점은 정중한 어조로 '~합니다', '~됩니다' 형태의 종결어미를 사용해주세요.**
+
+응답은 다음과 같은 JSON 형식으로 제공해주세요:
+{
+  "criteria": [
+    {
+      "name": "기준명", 
+      "score": 점수(0.0~1.0),
+      "feedback": "피드백 내용"
+    }
+  ],
+  "summary": "화자 특성 요약",
+  "strengths": ["강점1", "강점2"],
+  "improvements": ["개선점1", "개선점2"]
+}
+
+${speakerName}의 발화 내용:
+${speakerText}
+`;
+
+  const result = await model.generateContent(prompt);
+  const responseText = result.response.text();
+  
+  try {
+    const cleanText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    throw new Error('JSON 형식을 찾을 수 없습니다.');
+  } catch (parseError) {
+    console.error(`${speakerName} 분석 JSON 파싱 오류:`, parseError);
+    return getDefaultSpeakerAnalysis(speakerName);
+  }
+}
+
+// 화자간 상호작용 분석 함수
+async function analyzeInteraction(model, conversationText, speakerIds) {
+  const prompt = `
+다음은 ${speakerIds.length}명의 화자가 참여한 대화입니다. 화자들 간의 상호작용을 분석해주세요:
+
+1. 상호작용 빈도: 화자들이 얼마나 자주 서로 반응하고 대화하는지
+2. 균형도: 발화량이 화자들 간에 균형있게 분배되었는지
+3. 상호 존중: 서로의 의견을 존중하고 예의있게 대화하는지
+4. 협력성: 공동의 목표를 위해 협력하는지
+5. 갈등 해결: 의견 충돌이 있을 때 건설적으로 해결하는지
+
+각 기준별로 0.0에서 1.0 사이의 점수와 피드백을 제공해주세요.
+
+**중요: 모든 피드백, 요약, 개선 제안은 정중한 어조로 '~합니다', '~됩니다' 형태의 종결어미를 사용해주세요.**
+
+응답은 다음과 같은 JSON 형식으로 제공해주세요:
+{
+  "criteria": [
+    {
+      "name": "기준명",
+      "score": 점수(0.0~1.0), 
+      "feedback": "피드백 내용"
+    }
+  ],
+  "summary": "상호작용 분석 요약",
+  "recommendations": ["개선 제안1", "개선 제안2"]
+}
+
+대화 내용:
+${conversationText}
+`;
+
+  const result = await model.generateContent(prompt);
+  const responseText = result.response.text();
+  
+  try {
+    const cleanText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    throw new Error('JSON 형식을 찾을 수 없습니다.');
+  } catch (parseError) {
+    console.error('상호작용 분석 JSON 파싱 오류:', parseError);
+    return getDefaultInteractionAnalysis();
+  }
+}
+
+// 기본 분석 결과 함수들
+function getDefaultOverallAnalysis() {
+  return {
+    criteria: [
+      { name: "의사소통 명확성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "적극적 경청", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "회의 효율성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "문제 해결 능력", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "협력도", score: 0.7, feedback: "분석 중 오류가 발생했습니다." }
+    ],
+    summary: "API 오류로 인해 분석을 완료할 수 없었습니다."
+  };
+}
+
+function getDefaultSpeakerAnalyses(speakers) {
+  const analyses = {};
+  Object.keys(speakers).forEach(speakerId => {
+    analyses[speakerId] = getDefaultSpeakerAnalysis(speakers[speakerId]?.name || `화자 ${speakerId}`);
+  });
+  return analyses;
+}
+
+function getDefaultSpeakerAnalysis(speakerName) {
+  return {
+    criteria: [
+      { name: "발화 명확성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "논리성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "적극성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "전문성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "감정 조절", score: 0.7, feedback: "분석 중 오류가 발생했습니다." }
+    ],
+    summary: `${speakerName}의 분석 중 오류가 발생했습니다.`,
+    strengths: ["분석 불가"],
+    improvements: ["분석 불가"]
+  };
+}
+
+function getDefaultInteractionAnalysis() {
+  return {
+    criteria: [
+      { name: "상호작용 빈도", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "균형도", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "상호 존중", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "협력성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "갈등 해결", score: 0.7, feedback: "분석 중 오류가 발생했습니다." }
+    ],
+    summary: "상호작용 분석 중 오류가 발생했습니다.",
+    recommendations: ["분석 불가"]
+  };
 } 
