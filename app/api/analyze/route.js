@@ -113,64 +113,57 @@ export async function POST(req) {
       
       console.log('5. 공개 URL 생성 완료:', publicUrl);
       
-      // 임시 파일 삭제 (테스트 완료 후)
+      // Daglo API를 사용한 화자분석 및 텍스트 변환
+      console.log('6. Daglo API 호출 시작...')
+      const transcript = await processSpeechWithDaglo(publicUrl);
+      console.log('7. Daglo API 완료')
+      
+      // 임시 파일 삭제 (분석 완료 후)
       if (uploadedFilePath) {
         try {
           await supabase.storage
             .from('recordings')
             .remove([uploadedFilePath]);
-          console.log('6. 임시 파일 삭제 완료');
+          console.log('8. 임시 파일 삭제 완료');
         } catch (deleteError) {
           console.error('임시 파일 삭제 오류:', deleteError);
         }
       }
 
-      // Storage 테스트 성공 응답
-      const storageTestResult = {
-        transcript: [
-          {
-            speaker: '1',
-            text: 'Supabase Storage 업로드가 성공적으로 완료되었습니다.',
-            start: 0,
-            end: 3
-          }
-        ],
-        speakers: {
-          '1': {
-            id: '1',
-            name: '화자 1',
-            color: '#3B82F6'
-          }
-        },
+      // Daglo 테스트 성공 응답 (Gemini 분석 없이)
+      const dagloTestResult = {
+        transcript: transcript.transcript,
+        speakers: transcript.speakers,
         analysis: {
           overall: {
             criteria: [
-              { name: "의사소통 명확성", score: 0.9, feedback: "Storage 업로드 테스트가 성공했습니다." }
+              { name: "의사소통 명확성", score: 0.85, feedback: "Daglo API 음성 분석이 성공적으로 완료되었습니다." }
             ],
-            summary: "파일이 Supabase Storage에 성공적으로 업로드되었습니다."
+            summary: "음성이 텍스트로 변환되고 화자가 분리되었습니다."
           },
-          speakers: {
-            '1': {
+          speakers: Object.keys(transcript.speakers).reduce((acc, speakerId) => {
+            acc[speakerId] = {
               criteria: [
-                { name: "발화 명확성", score: 0.9, feedback: "Storage 테스트 중입니다." }
+                { name: "발화 명확성", score: 0.85, feedback: "Daglo API로 화자 분석이 완료되었습니다." }
               ],
-              summary: "Storage 테스트 화자입니다."
-            }
-          },
+              summary: `${transcript.speakers[speakerId].name}의 발화가 인식되었습니다.`
+            };
+            return acc;
+          }, {}),
           interaction: {
             criteria: [
-              { name: "상호작용 빈도", score: 0.9, feedback: "Storage 테스트 중입니다." }
+              { name: "상호작용 빈도", score: 0.85, feedback: "화자간 대화가 분석되었습니다." }
             ],
-            summary: "Storage 테스트 상호작용입니다."
+            summary: "Daglo API를 통한 화자 분리가 완료되었습니다."
           }
         }
       }
 
-      console.log('7. Storage 테스트 응답 반환 완료')
-      return NextResponse.json(storageTestResult, { headers: corsHeaders });
+      console.log('9. Daglo 테스트 응답 반환 완료')
+      return NextResponse.json(dagloTestResult, { headers: corsHeaders });
 
     } catch (error) {
-      console.error('Supabase Storage 처리 오류:', error);
+      console.error('Supabase Storage + Daglo API 처리 오류:', error);
       
       // 오류 발생 시 임시 파일 삭제
       if (uploadedFilePath) {
@@ -185,17 +178,12 @@ export async function POST(req) {
       }
       
       return NextResponse.json(
-        { error: `Supabase Storage 처리 중 오류가 발생했습니다: ${error.message}` },
+        { error: `음성 분석 처리 중 오류가 발생했습니다: ${error.message}` },
         { status: 500, headers: corsHeaders }
       );
     }
 
-    /* Daglo + Gemini API 호출 코드 (다음 단계에서 활성화)
-    // Daglo API를 사용한 화자분석 및 텍스트 변환
-    console.log('6. Daglo API 호출 시작...')
-    const transcript = await processSpeechWithDaglo(publicUrl);
-    console.log('7. Daglo API 완료')
-    
+    /* Gemini API 호출 코드 (마지막 단계에서 활성화)
     // Gemini API를 사용한 대화 분석
     console.log('8. Gemini API 호출 시작...')
     const analysisResult = await analyzeConversation(transcript.transcript, transcript.speakers);
