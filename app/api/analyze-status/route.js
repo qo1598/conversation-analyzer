@@ -120,4 +120,225 @@ export async function GET(req) {
   }
 }
 
-// TODO: 여기에 convertDagloResults와 analyzeConversation 함수들을 복사해야 함 
+// TODO: 여기에 convertDagloResults와 analyzeConversation 함수들을 복사해야 함
+
+// 간단한 Daglo 결과 변환 함수
+function convertDagloResults(dagloResult) {
+  try {
+    console.log('=== Daglo 결과 변환 시작 ===');
+    
+    const segments = [];
+    const speakersMap = {};
+    
+    // 화자 색상 지정
+    const speakerColors = {
+      '1': '#3B82F6', // blue
+      '2': '#EF4444', // red
+      '3': '#10B981', // green
+      '4': '#F59E0B', // yellow
+      '5': '#8B5CF6', // purple
+      '6': '#EC4899', // pink
+    };
+    
+    if (dagloResult.sttResults && dagloResult.sttResults.length > 0) {
+      const sttResult = dagloResult.sttResults[0];
+      
+      if (sttResult.words && sttResult.words.length > 0) {
+        // segmentId를 기준으로 화자별 세그먼트 생성
+        let currentSegmentId = null;
+        let currentText = '';
+        let segmentStart = null;
+        let segmentEnd = null;
+        let uniqueSegmentIds = new Set();
+        
+        for (const word of sttResult.words) {
+          const segmentId = word.segmentId || word.speaker || '1';
+          const startTime = parseFloat(word.startTime?.seconds || 0) + (word.startTime?.nanos || 0) / 1000000000;
+          const endTime = parseFloat(word.endTime?.seconds || 0) + (word.endTime?.nanos || 0) / 1000000000;
+          
+          uniqueSegmentIds.add(segmentId);
+          
+          if (currentSegmentId !== segmentId) {
+            if (currentSegmentId !== null && currentText.trim()) {
+              segments.push({
+                speaker: currentSegmentId,
+                text: currentText.trim(),
+                start: segmentStart,
+                end: segmentEnd
+              });
+            }
+            
+            currentSegmentId = segmentId;
+            currentText = word.word || '';
+            segmentStart = startTime;
+            segmentEnd = endTime;
+          } else {
+            if (word.word) {
+              currentText += word.word;
+            }
+            segmentEnd = endTime;
+          }
+        }
+        
+        // 마지막 세그먼트 저장
+        if (currentSegmentId !== null && currentText.trim()) {
+          segments.push({
+            speaker: currentSegmentId,
+            text: currentText.trim(),
+            start: segmentStart,
+            end: segmentEnd
+          });
+        }
+        
+        // 화자 정보 생성
+        Array.from(uniqueSegmentIds).forEach(segmentId => {
+          const speakerNumber = parseInt(segmentId) || 1;
+          speakersMap[segmentId] = {
+            id: segmentId,
+            name: `화자 ${speakerNumber}`,
+            color: speakerColors[segmentId] || '#374151'
+          };
+        });
+        
+      } else {
+        // 단어 정보가 없는 경우 전체 텍스트만 사용
+        segments.push({
+          speaker: '1',
+          text: sttResult.transcript || '음성 인식 결과가 없습니다',
+          start: 0,
+          end: 10
+        });
+        
+        speakersMap['1'] = {
+          id: '1',
+          name: '화자 1',
+          color: speakerColors['1']
+        };
+      }
+    } else {
+      // 결과가 없는 경우
+      segments.push({
+        speaker: '1',
+        text: '음성 인식 결과가 없습니다',
+        start: 0,
+        end: 1
+      });
+      
+      speakersMap['1'] = {
+        id: '1',
+        name: '화자 1',
+        color: speakerColors['1']
+      };
+    }
+    
+    console.log(`변환 완료: 세그먼트 수 ${segments.length}, 화자 수 ${Object.keys(speakersMap).length}`);
+    
+    return {
+      transcript: segments,
+      speakers: speakersMap
+    };
+    
+  } catch (error) {
+    console.error('Daglo 결과 변환 오류:', error);
+    
+    // 변환 실패 시 기본 응답 반환
+    return {
+      transcript: [
+        {
+          speaker: '1',
+          text: '결과 변환 중 오류가 발생했습니다',
+          start: 0,
+          end: 1
+        }
+      ],
+      speakers: {
+        '1': {
+          id: '1',
+          name: '화자 1',
+          color: '#3B82F6'
+        }
+      }
+    };
+  }
+}
+
+// 간단한 Gemini API 대화 분석 함수
+async function analyzeConversation(transcript, speakers) {
+  try {
+    if (!GEMINI_API_KEY) {
+      throw new Error('Gemini API 키가 설정되지 않았습니다.');
+    }
+    
+    console.log('Gemini API 분석 시작...');
+    
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    // 간단한 전체 분석만 수행
+    const limitedTranscript = transcript.slice(0, 20);
+    const conversationText = limitedTranscript
+      .map(item => `${speakers[item.speaker]?.name || `화자 ${item.speaker}`}: ${item.text}`)
+      .join('\n');
+
+    const prompt = `
+다음 대화를 분석하고 간단한 평가를 해주세요:
+
+${conversationText}
+
+다음 JSON 형식으로 응답해주세요:
+{
+  "overall": {
+    "criteria": [
+      {"name": "의사소통 명확성", "score": 0.8, "feedback": "명확하게 의사소통했습니다"},
+      {"name": "적극적 경청", "score": 0.7, "feedback": "서로의 의견을 잘 들었습니다"}
+    ],
+    "summary": "전체적으로 좋은 대화였습니다"
+  }
+}
+`;
+
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    
+    try {
+      const cleanText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log('Gemini 분석 완료');
+        return parsed;
+      }
+    } catch (parseError) {
+      console.error('Gemini 응답 파싱 오류:', parseError);
+    }
+    
+    // 파싱 실패 시 기본 응답
+    return {
+      overall: {
+        criteria: [
+          { name: "의사소통 명확성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+          { name: "적극적 경청", score: 0.7, feedback: "분석 중 오류가 발생했습니다." }
+        ],
+        summary: "분석을 완료했지만 상세 결과 생성 중 오류가 발생했습니다."
+      },
+      speakers: {},
+      interaction: { criteria: [], summary: "", recommendations: [] }
+    };
+
+  } catch (error) {
+    console.error('Gemini API 호출 오류:', error);
+    
+    // 오류 발생 시 기본 응답 반환
+    return {
+      overall: {
+        criteria: [
+          { name: "의사소통 명확성", score: 0.7, feedback: "API 오류로 분석할 수 없습니다." },
+          { name: "적극적 경청", score: 0.7, feedback: "API 오류로 분석할 수 없습니다." }
+        ],
+        summary: "API 오류로 인해 분석을 완료할 수 없었습니다."
+      },
+      speakers: {},
+      interaction: { criteria: [], summary: "", recommendations: [] }
+    };
+  }
+} 
