@@ -24,19 +24,29 @@ export default function TeacherSessionView() {
   const loadSessionData = async () => {
     try {
       setLoading(true)
-      console.log('세션 데이터 로딩 시작:', sessionId)
+      console.log('=== 세션 상세 데이터 로딩 시작 ===')
+      console.log('sessionId:', sessionId)
       
       const result = await sessionAPI.getSessionDetails(sessionId)
-      console.log('세션 데이터 로딩 결과:', result)
+      console.log('=== 세션 상세 데이터 로딩 결과 ===')
+      console.log('result:', result)
       
       if (result.success) {
+        console.log('세션 데이터:', {
+          id: result.data.id,
+          name: result.data.name,
+          code: result.data.code,
+          recordingsLength: result.data.recordings?.length || 0,
+          recordings: result.data.recordings
+        })
         setSession(result.data)
-        console.log('세션 데이터 설정 완료:', result.data)
+        console.log('세션 상태 설정 완료')
       } else {
+        console.error('세션 로딩 실패:', result.error)
         throw new Error(result.error || '세션을 찾을 수 없습니다.')
       }
     } catch (err) {
-      console.error('세션 데이터 로딩 오류:', err)
+      console.error('=== 세션 데이터 로딩 오류 ===', err)
       setError(err.message || '세션 데이터를 불러오는 중 오류가 발생했습니다.')
     } finally {
       setLoading(false)
