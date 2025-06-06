@@ -159,7 +159,7 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
         <input 
           ref={inputRef}
           type="file" 
-          accept="audio/*"
+          accept="audio/*,.mp3,.wav,.m4a,.aac,.webm,.ogg"
           onChange={handleChange}
           className="hidden"
           disabled={uploading}
@@ -187,8 +187,14 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
         ) : (
           <div>
             <p className="text-gray-600">녹음 파일을 여기에 끌어다 놓거나 클릭하여 선택하세요</p>
-            <p className="text-sm text-gray-500 mt-1">지원 형식: .mp3, .wav, .m4a</p>
+            <p className="text-sm text-gray-500 mt-1">지원 형식: .mp3, .wav, .m4a, .aac</p>
             <p className="text-sm text-gray-500">최대 파일 크기: 50MB</p>
+            <div className="mt-3 p-3 bg-blue-50 rounded-md">
+              <p className="text-xs text-blue-600">
+                📱 <strong>iPhone 사용자</strong>: "파일" 앱을 통해 음성 메모를 먼저 내보낸 후 업로드하거나, 
+                음성 메모에서 공유 → 파일로 저장 후 선택해주세요.
+              </p>
+            </div>
           </div>
         )}
       </div>
