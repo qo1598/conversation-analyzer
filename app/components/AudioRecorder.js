@@ -40,8 +40,50 @@ export default function AudioRecorder({ onRecordingComplete, onError, onAnalysis
       streamRef.current = stream
       chunksRef.current = []
       
+      // Daglo API가 지원하는 형식 중 브라우저가 지원하는 것 찾기
+      const supportedTypes = [
+        'audio/wav',
+        'audio/mp3', 
+        'audio/mp4',
+        'audio/aac',
+        'audio/flac',
+        'audio/webm;codecs=opus' // 마지막 옵션으로 webm
+      ];
+      
+      let selectedType = 'audio/webm;codecs=opus'; // 기본값
+      let selectedMimeType = 'audio/webm';
+      let selectedExtension = 'webm';
+      
+      for (const type of supportedTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          selectedType = type;
+          if (type.includes('wav')) {
+            selectedMimeType = 'audio/wav';
+            selectedExtension = 'wav';
+          } else if (type.includes('mp3')) {
+            selectedMimeType = 'audio/mp3';
+            selectedExtension = 'mp3';
+          } else if (type.includes('mp4')) {
+            selectedMimeType = 'audio/mp4';
+            selectedExtension = 'mp4';
+          } else if (type.includes('aac')) {
+            selectedMimeType = 'audio/aac';
+            selectedExtension = 'aac';
+          } else if (type.includes('flac')) {
+            selectedMimeType = 'audio/flac';
+            selectedExtension = 'flac';
+          } else {
+            selectedMimeType = 'audio/webm';
+            selectedExtension = 'webm';
+          }
+          break;
+        }
+      }
+      
+      console.log('선택된 오디오 형식:', selectedType);
+      
       const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
+        mimeType: selectedType
       })
       
       mediaRecorderRef.current = mediaRecorder
@@ -53,9 +95,13 @@ export default function AudioRecorder({ onRecordingComplete, onError, onAnalysis
       }
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        const blob = new Blob(chunksRef.current, { type: selectedMimeType })
         setAudioBlob(blob)
         setAudioUrl(URL.createObjectURL(blob))
+        
+        // 선택된 형식을 저장 (업로드 시 사용)
+        blob.selectedExtension = selectedExtension;
+        setAudioBlob(blob);
         
         // 스트림 정리
         if (streamRef.current) {
@@ -119,7 +165,7 @@ export default function AudioRecorder({ onRecordingComplete, onError, onAnalysis
     
     try {
       const formData = new FormData()
-      formData.append('audio', audioBlob, 'recording.webm')
+      formData.append('audio', audioBlob, 'recording.' + audioBlob.selectedExtension)
       
       const response = await fetch('/api/analyze', {
         method: 'POST',
