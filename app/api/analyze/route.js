@@ -126,8 +126,22 @@ export async function POST(req) {
         if (!testResponse.ok) {
           throw new Error(`URL 접근 실패: ${testResponse.status} ${testResponse.statusText}`);
         }
+        
+        // GET 요청으로도 테스트
+        console.log('5.3. GET 요청 테스트 시작...');
+        const getResponse = await fetch(publicUrl);
+        console.log('5.4. GET 요청 결과:', {
+          status: getResponse.status,
+          contentType: getResponse.headers.get('content-type'),
+          contentLength: getResponse.headers.get('content-length')
+        });
+        
+        if (!getResponse.ok) {
+          throw new Error(`GET 요청 실패: ${getResponse.status} ${getResponse.statusText}`);
+        }
+        
       } catch (urlError) {
-        console.error('5.3. URL 접근 오류:', urlError);
+        console.error('5.5. URL 접근 오류:', urlError);
         throw new Error(`업로드된 파일에 접근할 수 없습니다: ${urlError.message}`);
       }
       
@@ -136,7 +150,7 @@ export async function POST(req) {
       let transcript;
       
       try {
-        transcript = await processSpeechWithDaglo(publicUrl);
+        transcript = await processSpeechWithDaglo(publicUrl, fileBuffer);
         console.log('7. Daglo API 완료 - 결과:', {
           transcriptLength: transcript.transcript?.length || 0,
           speakersCount: Object.keys(transcript.speakers || {}).length,
@@ -270,7 +284,7 @@ export async function POST(req) {
 }
 
 // Daglo API를 사용한 화자 분리 및 텍스트 변환 함수
-async function processSpeechWithDaglo(audioUrl) {
+async function processSpeechWithDaglo(audioUrl, audioBuffer = null) {
   try {
     console.log('Daglo API 트랜스크립션 시작...');
     
@@ -280,93 +294,151 @@ async function processSpeechWithDaglo(audioUrl) {
     }
     
     console.log('Daglo API 키 확인 완료, API 호출 시작...');
-    console.log('사용 URL:', audioUrl);
     
-    // Daglo API 요청 옵션 (공식 문서에 따른 올바른 구조)
-    const requestOptions = {
-      audio: {
-        source: {
-          url: audioUrl
-        }
-      },
-      sttConfig: {
+    // API 요청 URL
+    const apiUrl = 'https://apis.daglo.ai/stt/v1/async/transcripts';
+    
+    // 파일 직접 업로드 방식으로 시도
+    if (audioBuffer) {
+      console.log('파일 직접 업로드 방식 시도...');
+      
+      // FormData로 파일 직접 전송
+      const formData = new FormData();
+      const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' });
+      formData.append('audio', audioBlob, 'recording.webm');
+      
+      // STT 설정을 JSON으로 추가
+      const sttConfig = {
         speakerDiarization: {
           enable: true,
           maxSpeakers: 6
         },
         wordAlignment: true,
         punctuation: true
-      }
-    };
-    
-    // API 요청 URL
-    const apiUrl = 'https://apis.daglo.ai/stt/v1/async/transcripts';
-    
-    // 1단계: 트랜스크립션 요청
-    console.log('Daglo API 트랜스크립션 요청 중...');
-    console.log('요청 옵션:', JSON.stringify(requestOptions, null, 2));
-    console.log('요청 URL:', apiUrl);
-    console.log('Authorization 헤더:', `Bearer ${DAGLO_API_KEY.substring(0, 10)}...`);
-    
-    const submitResponse = await axios.post(apiUrl, requestOptions, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${DAGLO_API_KEY}`
-      }
-    });
-    
-    console.log('Daglo API 제출 응답:', {
-      status: submitResponse.status,
-      statusText: submitResponse.statusText,
-      data: submitResponse.data
-    });
-    
-    if (!submitResponse.data || !submitResponse.data.rid) {
-      throw new Error('Daglo API 요청 응답에서 RID를 찾을 수 없습니다.');
-    }
-    
-    const rid = submitResponse.data.rid;
-    console.log('트랜스크립션 요청 완료. RID:', rid);
-    
-    // 2단계: 결과 폴링
-    const maxRetries = 20; // 최대 2분 대기 (20 * 6초)
-    const retryInterval = 6000; // 6초마다 확인
-    
-    for (let i = 0; i < maxRetries; i++) {
-      console.log(`트랜스크립션 상태 확인 중... (${i + 1}/${maxRetries}) - ${i * 6}초 경과`);
+      };
+      formData.append('sttConfig', JSON.stringify(sttConfig));
       
-      const resultResponse = await axios.get(`${apiUrl}/${rid}`, {
+      console.log('파일 직접 업로드 요청 중...');
+      
+      const submitResponse = await axios.post(apiUrl, formData, {
         headers: {
+          'Authorization': `Bearer ${DAGLO_API_KEY}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      console.log('파일 직접 업로드 응답:', {
+        status: submitResponse.status,
+        data: submitResponse.data
+      });
+      
+      if (!submitResponse.data || !submitResponse.data.rid) {
+        throw new Error('Daglo API 요청 응답에서 RID를 찾을 수 없습니다.');
+      }
+      
+      const rid = submitResponse.data.rid;
+      console.log('트랜스크립션 요청 완료. RID:', rid);
+      
+      // 결과 폴링은 동일
+      return await pollDagloResults(rid);
+      
+    } else {
+      // 기존 URL 방식
+      console.log('URL 방식으로 시도...');
+      console.log('사용 URL:', audioUrl);
+      
+      // Daglo API 요청 옵션 (공식 문서에 따른 올바른 구조)
+      const requestOptions = {
+        audio: {
+          source: {
+            url: audioUrl
+          }
+        },
+        sttConfig: {
+          speakerDiarization: {
+            enable: true,
+            maxSpeakers: 6
+          },
+          wordAlignment: true,
+          punctuation: true
+        }
+      };
+      
+      // 1단계: 트랜스크립션 요청
+      console.log('Daglo API 트랜스크립션 요청 중...');
+      console.log('요청 옵션:', JSON.stringify(requestOptions, null, 2));
+      console.log('요청 URL:', apiUrl);
+      console.log('Authorization 헤더:', `Bearer ${DAGLO_API_KEY.substring(0, 10)}...`);
+      
+      const submitResponse = await axios.post(apiUrl, requestOptions, {
+        headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${DAGLO_API_KEY}`
         }
       });
       
-      console.log(`상태: ${resultResponse.data.status}`);
+      console.log('Daglo API 제출 응답:', {
+        status: submitResponse.status,
+        statusText: submitResponse.statusText,
+        data: submitResponse.data
+      });
       
-      if (resultResponse.data.status === 'transcribed') {
-        console.log('트랜스크립션 완료');
-        const result = resultResponse.data;
-        
-        // 전체 응답 구조 상세 로깅
-        console.log('=== Daglo API 전체 응답 구조 ===');
-        console.log(JSON.stringify(result, null, 2));
-        
-        // 결과 변환
-        return convertDagloResults(result);
-      } else if (resultResponse.data.status === 'transcript_error' || resultResponse.data.status === 'file_error') {
-        throw new Error(`Daglo API 오류: ${resultResponse.data.status}`);
+      if (!submitResponse.data || !submitResponse.data.rid) {
+        throw new Error('Daglo API 요청 응답에서 RID를 찾을 수 없습니다.');
       }
       
-      // 상태가 완료되지 않았으면 대기
-      await new Promise(resolve => setTimeout(resolve, retryInterval));
+      const rid = submitResponse.data.rid;
+      console.log('트랜스크립션 요청 완료. RID:', rid);
+      
+      return await pollDagloResults(rid);
     }
     
-    throw new Error('Daglo API 응답 대기 시간 초과 (2분) - 파일이 너무 크거나 처리 시간이 오래 걸립니다');
   } catch (error) {
     console.error('Daglo API 오류:', error);
     console.error('오류 상세 내용:', error.response?.data || '상세 정보 없음');
+    console.error('오류 상태 코드:', error.response?.status);
+    console.error('오류 헤더:', error.response?.headers);
+    console.error('요청 설정:', error.config);
     throw new Error(`Daglo API 처리 중 오류 발생: ${error.message}`);
   }
+}
+
+// 결과 폴링을 별도 함수로 분리
+async function pollDagloResults(rid) {
+  const apiUrl = 'https://apis.daglo.ai/stt/v1/async/transcripts';
+  const maxRetries = 20; // 최대 2분 대기 (20 * 6초)
+  const retryInterval = 6000; // 6초마다 확인
+  
+  for (let i = 0; i < maxRetries; i++) {
+    console.log(`트랜스크립션 상태 확인 중... (${i + 1}/${maxRetries}) - ${i * 6}초 경과`);
+    
+    const resultResponse = await axios.get(`${apiUrl}/${rid}`, {
+      headers: {
+        'Authorization': `Bearer ${DAGLO_API_KEY}`
+      }
+    });
+    
+    console.log(`상태: ${resultResponse.data.status}`);
+    
+    if (resultResponse.data.status === 'transcribed') {
+      console.log('트랜스크립션 완료');
+      const result = resultResponse.data;
+      
+      // 전체 응답 구조 상세 로깅
+      console.log('=== Daglo API 전체 응답 구조 ===');
+      console.log(JSON.stringify(result, null, 2));
+      
+      // 결과 변환
+      return convertDagloResults(result);
+    } else if (resultResponse.data.status === 'transcript_error' || resultResponse.data.status === 'file_error') {
+      throw new Error(`Daglo API 오류: ${resultResponse.data.status}`);
+    }
+    
+    // 상태가 완료되지 않았으면 대기
+    await new Promise(resolve => setTimeout(resolve, retryInterval));
+  }
+  
+  throw new Error('Daglo API 응답 대기 시간 초과 (2분) - 파일이 너무 크거나 처리 시간이 오래 걸립니다');
 }
 
 // Daglo API 결과 변환 함수
