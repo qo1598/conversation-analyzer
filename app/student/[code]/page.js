@@ -50,30 +50,38 @@ export default function StudentSession() {
     // Supabase에 녹음 결과 저장 (API에서 이미 분석 완료)
     if (session && result) {
       try {
-        console.log('녹음 완료:', result)
+        console.log('=== 녹음 완료 결과 ===', result)
+        console.log('세션 ID:', session.id)
+        console.log('transcript 타입:', typeof result.transcript, '길이:', result.transcript?.length)
+        console.log('speakers 타입:', typeof result.speakers, '키:', Object.keys(result.speakers || {}))
+        console.log('analysis 타입:', typeof result.analysis)
         
         // API에서 이미 분석이 완료되었으므로 파일 없이 분석 결과만 저장
         const uploadResult = await recordingAPI.uploadRecording(
           session.id, 
           null, // audioFile은 API에서 처리했으므로 null
           {
-            transcript: result.transcript || '텍스트 변환 결과 없음',
-            speakers: result.speakers || [],
+            transcript: result.transcript || [],
+            speakers: result.speakers || {},
             analysis: result.analysis || {}
           }
         )
+
+        console.log('=== 업로드 결과 ===', uploadResult)
 
         if (uploadResult.success) {
           console.log('Supabase에 분석 결과 저장 완료:', uploadResult.data)
           setUploadSuccess(true)
         } else {
+          console.error('업로드 실패:', uploadResult.error)
           throw new Error(uploadResult.error || 'Supabase 저장 실패')
         }
       } catch (error) {
-        console.error('분석 결과 저장 오류:', error)
+        console.error('=== 분석 결과 저장 오류 ===', error)
         setError(`분석 결과 저장 중 오류가 발생했습니다: ${error.message}`)
       }
     } else {
+      console.log('세션 또는 결과가 없음:', { session: !!session, result: !!result })
       setUploadSuccess(true)
     }
   }
