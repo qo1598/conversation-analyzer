@@ -284,6 +284,7 @@ export async function POST(req) {
 }
 
 // Daglo API를 사용한 화자 분리 및 텍스트 변환 함수
+// 2025-01-06: URL 방식만 사용하도록 수정됨
 async function processSpeechWithDaglo(audioUrl) {
   try {
     console.log('Daglo API 트랜스크립션 시작...');
