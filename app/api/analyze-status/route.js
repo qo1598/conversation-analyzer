@@ -144,61 +144,93 @@ function convertDagloResults(dagloResult) {
       const sttResult = dagloResult.sttResults[0];
       
       if (sttResult.words && sttResult.words.length > 0) {
-        // segmentId를 기준으로 화자별 세그먼트 생성
-        let currentSegmentId = null;
+        // 1단계: 모든 고유 segmentId 수집
+        const allSegmentIds = new Set();
+        sttResult.words.forEach(word => {
+          const segmentId = word.segmentId || word.speaker || '1';
+          allSegmentIds.add(segmentId);
+        });
+        
+        console.log(`원본 segment 수: ${allSegmentIds.size}`);
+        
+        // 2단계: segmentId를 실제 화자로 매핑 (최대 6명)
+        const segmentToSpeaker = {};
+        const sortedSegmentIds = Array.from(allSegmentIds).sort();
+        
+        // segmentId를 그룹화하여 실제 화자 수 줄이기
+        const maxSpeakers = 6;
+        const segmentGroupSize = Math.ceil(sortedSegmentIds.length / maxSpeakers);
+        
+        sortedSegmentIds.forEach((segmentId, index) => {
+          const speakerNumber = Math.min(Math.floor(index / segmentGroupSize) + 1, maxSpeakers);
+          segmentToSpeaker[segmentId] = speakerNumber.toString();
+        });
+        
+        console.log(`화자 매핑 결과:`, Object.keys(segmentToSpeaker).length, '개 segment → ', 
+                   new Set(Object.values(segmentToSpeaker)).size, '명 화자');
+        
+        // 3단계: 매핑된 화자로 세그먼트 생성
+        let currentSpeaker = null;
         let currentText = '';
         let segmentStart = null;
         let segmentEnd = null;
-        let uniqueSegmentIds = new Set();
+        let wordCount = 0;
         
         for (const word of sttResult.words) {
-          const segmentId = word.segmentId || word.speaker || '1';
+          const originalSegmentId = word.segmentId || word.speaker || '1';
+          const mappedSpeaker = segmentToSpeaker[originalSegmentId] || '1';
           const startTime = parseFloat(word.startTime?.seconds || 0) + (word.startTime?.nanos || 0) / 1000000000;
           const endTime = parseFloat(word.endTime?.seconds || 0) + (word.endTime?.nanos || 0) / 1000000000;
           
-          uniqueSegmentIds.add(segmentId);
-          
-          if (currentSegmentId !== segmentId) {
-            if (currentSegmentId !== null && currentText.trim()) {
+          if (currentSpeaker !== mappedSpeaker) {
+            // 이전 세그먼트 저장 (충분한 길이가 있는 경우만)
+            if (currentSpeaker !== null && currentText.trim() && wordCount >= 3) {
               segments.push({
-                speaker: currentSegmentId,
+                speaker: currentSpeaker,
                 text: currentText.trim(),
                 start: segmentStart,
                 end: segmentEnd
               });
             }
             
-            currentSegmentId = segmentId;
+            // 새 세그먼트 시작
+            currentSpeaker = mappedSpeaker;
             currentText = word.word || '';
             segmentStart = startTime;
             segmentEnd = endTime;
+            wordCount = 1;
           } else {
+            // 같은 화자인 경우 텍스트 연결
             if (word.word) {
               currentText += word.word;
+              wordCount++;
             }
             segmentEnd = endTime;
           }
         }
         
         // 마지막 세그먼트 저장
-        if (currentSegmentId !== null && currentText.trim()) {
+        if (currentSpeaker !== null && currentText.trim() && wordCount >= 3) {
           segments.push({
-            speaker: currentSegmentId,
+            speaker: currentSpeaker,
             text: currentText.trim(),
             start: segmentStart,
             end: segmentEnd
           });
         }
         
-        // 화자 정보 생성
-        Array.from(uniqueSegmentIds).forEach(segmentId => {
-          const speakerNumber = parseInt(segmentId) || 1;
-          speakersMap[segmentId] = {
-            id: segmentId,
+        // 4단계: 화자 정보 생성 (실제 사용된 화자만)
+        const usedSpeakers = new Set(segments.map(s => s.speaker));
+        usedSpeakers.forEach(speakerId => {
+          const speakerNumber = parseInt(speakerId) || 1;
+          speakersMap[speakerId] = {
+            id: speakerId,
             name: `화자 ${speakerNumber}`,
-            color: speakerColors[segmentId] || '#374151'
+            color: speakerColors[speakerId] || '#374151'
           };
         });
+        
+        console.log(`최종 결과: ${segments.length}개 세그먼트, ${usedSpeakers.size}명 화자`);
         
       } else {
         // 단어 정보가 없는 경우 전체 텍스트만 사용
