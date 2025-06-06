@@ -198,12 +198,6 @@ export default function TeacherSessionView() {
                           <p className="text-sm text-gray-500">
                             {new Date(recording.uploaded_at).toLocaleString()}
                           </p>
-                          {/* 파일 크기가 있고 0이 아닐 때만 표시 */}
-                          {recording.file_size && recording.file_size > 0 && (
-                            <p className="text-xs text-gray-400">
-                              크기: {Math.round(recording.file_size / 1024)} KB
-                            </p>
-                          )}
                         </div>
                         <button
                           onClick={(e) => {
