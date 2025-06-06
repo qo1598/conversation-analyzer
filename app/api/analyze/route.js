@@ -58,74 +58,6 @@ export async function POST(req) {
 
     console.log('오디오 파일 수신 완료:', audioFile.name, audioFile.size)
 
-    // 임시 모의 응답 (연결 테스트용)
-    const mockResult = {
-      transcript: [
-        {
-          speaker: '1',
-          text: '안녕하세요. 오늘은 좋은 날씨네요.',
-          start: 0,
-          end: 3
-        },
-        {
-          speaker: '2',
-          text: '네, 맞아요. 정말 따뜻하고 맑은 하루입니다.',
-          start: 4,
-          end: 8
-        }
-      ],
-      speakers: {
-        '1': {
-          id: '1',
-          name: '화자 1',
-          color: '#3B82F6'
-        },
-        '2': {
-          id: '2',
-          name: '화자 2',
-          color: '#EF4444'
-        }
-      },
-      analysis: {
-        overall: {
-          criteria: [
-            { name: "의사소통 명확성", score: 0.85, feedback: "명확하게 의사를 전달하고 있습니다." },
-            { name: "적극적 경청", score: 0.80, feedback: "서로의 의견을 잘 듣고 있습니다." },
-            { name: "회의 효율성", score: 0.75, feedback: "효율적으로 대화가 진행되고 있습니다." }
-          ],
-          summary: "전반적으로 좋은 의사소통이 이루어지고 있습니다."
-        },
-        speakers: {
-          '1': {
-            criteria: [
-              { name: "발화 명확성", score: 0.85, feedback: "명확하게 말하고 있습니다." },
-              { name: "논리성", score: 0.80, feedback: "논리적으로 말하고 있습니다." }
-            ],
-            summary: "화자 1은 명확하고 논리적으로 대화에 참여하고 있습니다."
-          },
-          '2': {
-            criteria: [
-              { name: "발화 명확성", score: 0.80, feedback: "명확하게 말하고 있습니다." },
-              { name: "논리성", score: 0.85, feedback: "논리적으로 응답하고 있습니다." }
-            ],
-            summary: "화자 2는 적절하게 응답하고 있습니다."
-          }
-        },
-        interaction: {
-          criteria: [
-            { name: "상호작용 빈도", score: 0.80, feedback: "적절한 상호작용이 이루어지고 있습니다." },
-            { name: "균형도", score: 0.75, feedback: "발화량이 균형있게 분배되어 있습니다." }
-          ],
-          summary: "화자들 간의 상호작용이 원활합니다."
-        }
-      }
-    }
-
-    console.log('모의 분석 결과 반환')
-    
-    return NextResponse.json(mockResult, { headers: corsHeaders });
-
-    /* Supabase 코드 (임시 주석 처리)
     // 요청 크기 확인
     const MAX_SIZE = 50 * 1024 * 1024; // 50MB
     if (audioFile.size > MAX_SIZE) {
@@ -216,7 +148,6 @@ export async function POST(req) {
         { status: 500, headers: corsHeaders }
       );
     }
-    */
   } catch (error) {
     console.error('Error processing audio:', error);
     return NextResponse.json(
