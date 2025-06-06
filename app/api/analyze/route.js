@@ -317,11 +317,11 @@ async function processSpeechWithDaglo(audioUrl) {
 // 결과 폴링을 별도 함수로 분리
 async function pollDagloResults(rid) {
   const apiUrl = 'https://apis.daglo.ai/stt/v1/async/transcripts';
-  const maxRetries = 30; // 최대 5분 대기로 복구 (30 * 10초)
-  const retryInterval = 10000; // 10초마다 확인으로 복구
+  const maxRetries = 8; // 최대 48초 대기 (8 * 6초)
+  const retryInterval = 6000; // 6초마다 확인
   
   for (let i = 0; i < maxRetries; i++) {
-    console.log(`트랜스크립션 상태 확인 중... (${i + 1}/${maxRetries}) - ${i * 10}초 경과`);
+    console.log(`트랜스크립션 상태 확인 중... (${i + 1}/${maxRetries}) - ${i * 6}초 경과`);
     
     const resultResponse = await axios.get(`${apiUrl}/${rid}`, {
       headers: {
@@ -349,7 +349,7 @@ async function pollDagloResults(rid) {
     await new Promise(resolve => setTimeout(resolve, retryInterval));
   }
   
-  throw new Error('Daglo API 응답 대기 시간 초과 (5분) - 파일이 너무 크거나 처리 시간이 오래 걸립니다');
+  throw new Error('Daglo API 응답 대기 시간 초과 (48초) - 더 짧은 오디오 파일을 사용해주세요');
 }
 
 // Daglo API 결과 변환 함수
