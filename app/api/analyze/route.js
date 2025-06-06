@@ -66,11 +66,11 @@ export async function POST(req) {
     })
 
     // 요청 크기 확인
-    const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB로 제한 (Daglo API 처리 시간 단축)
     if (audioFile.size > MAX_SIZE) {
       console.error('파일 크기 초과:', audioFile.size)
       return NextResponse.json(
-        { error: `파일 크기가 너무 큽니다. 최대 50MB까지 업로드 가능합니다. (현재: ${Math.round(audioFile.size / 1024 / 1024 * 100) / 100}MB)` },
+        { error: `파일 크기가 너무 큽니다. 최대 10MB까지 업로드 가능합니다. (현재: ${Math.round(audioFile.size / 1024 / 1024 * 100) / 100}MB)` },
         { status: 413, headers: corsHeaders }
       );
     }
@@ -117,52 +117,6 @@ export async function POST(req) {
       console.log('6. Daglo API 호출 시작...')
       let transcript;
       
-      // 임시: 모의 데이터 사용 (실제 Daglo API 대신)
-      console.log('임시 모의 데이터 사용 중...')
-      transcript = {
-        transcript: [
-          {
-            speaker: '1',
-            text: '안녕하세요. 오늘 회의를 시작하겠습니다.',
-            start: 0,
-            end: 3
-          },
-          {
-            speaker: '2', 
-            text: '네, 안녕하세요. 준비되었습니다.',
-            start: 3.5,
-            end: 6
-          },
-          {
-            speaker: '1',
-            text: '그럼 첫 번째 안건부터 논의해보겠습니다.',
-            start: 6.5,
-            end: 9
-          },
-          {
-            speaker: '2',
-            text: '좋습니다. 제가 먼저 의견을 말씀드리겠습니다.',
-            start: 9.5,
-            end: 12
-          }
-        ],
-        speakers: {
-          '1': {
-            id: '1',
-            name: '화자 1',
-            color: '#3B82F6'
-          },
-          '2': {
-            id: '2', 
-            name: '화자 2',
-            color: '#EF4444'
-          }
-        }
-      };
-      
-      console.log('7. 모의 데이터 생성 완료')
-      
-      /* 실제 Daglo API 호출 코드 (임시 비활성화)
       try {
         transcript = await processSpeechWithDaglo(publicUrl);
         console.log('7. Daglo API 완료 - 결과:', {
@@ -187,13 +141,26 @@ export async function POST(req) {
           }
         }
         
-        // 실제 오류를 반환하여 문제 파악
-        return NextResponse.json(
-          { error: `Daglo API 오류: ${dagloError.message}` },
-          { status: 500, headers: corsHeaders }
-        );
+        // Daglo API 실패 시 기본 응답으로 폴백
+        console.log('Daglo API 실패, 기본 응답 생성');
+        transcript = {
+          transcript: [
+            {
+              speaker: '1',
+              text: `음성 분석 중 오류가 발생했습니다: ${dagloError.message}`,
+              start: 0,
+              end: 3
+            }
+          ],
+          speakers: {
+            '1': {
+              id: '1',
+              name: '화자 1',
+              color: '#3B82F6'
+            }
+          }
+        };
       }
-      */
 
       // 임시 파일 삭제 (분석 완료 후)
       if (uploadedFilePath) {
@@ -336,11 +303,11 @@ async function processSpeechWithDaglo(audioUrl) {
     console.log('트랜스크립션 요청 완료. RID:', rid);
     
     // 2단계: 결과 폴링
-    const maxRetries = 30; // 최대 5분 대기 (30 * 10초)
-    const retryInterval = 10000; // 10초마다 확인
+    const maxRetries = 20; // 최대 2분 대기 (20 * 6초)
+    const retryInterval = 6000; // 6초마다 확인
     
     for (let i = 0; i < maxRetries; i++) {
-      console.log(`트랜스크립션 상태 확인 중... (${i + 1}/${maxRetries})`);
+      console.log(`트랜스크립션 상태 확인 중... (${i + 1}/${maxRetries}) - ${i * 6}초 경과`);
       
       const resultResponse = await axios.get(`${apiUrl}/${rid}`, {
         headers: {
@@ -368,7 +335,7 @@ async function processSpeechWithDaglo(audioUrl) {
       await new Promise(resolve => setTimeout(resolve, retryInterval));
     }
     
-    throw new Error('Daglo API 응답 대기 시간 초과 (5분)');
+    throw new Error('Daglo API 응답 대기 시간 초과 (2분) - 파일이 너무 크거나 처리 시간이 오래 걸립니다');
   } catch (error) {
     console.error('Daglo API 오류:', error);
     console.error('오류 상세 내용:', error.response?.data || '상세 정보 없음');
