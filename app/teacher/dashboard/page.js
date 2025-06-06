@@ -33,8 +33,18 @@ export default function TeacherDashboard() {
   }
 
   const loadSessions = async () => {
+    console.log('=== 세션 로드 시작 ===')
     const { success, data } = await sessionAPI.getTeacherSessions()
+    console.log('세션 로드 결과:', { success, data })
+    
     if (success) {
+      console.log('세션 데이터 상세:', data?.map(session => ({
+        id: session.id,
+        name: session.name,
+        code: session.code,
+        recordingsCount: session.recordings?.length || 0,
+        recordings: session.recordings
+      })))
       setSessions(data || [])
     } else {
       console.error('세션 로드 실패')
