@@ -47,15 +47,15 @@ export default function StudentSession() {
   const handleRecordingComplete = async (result) => {
     setIsAnalyzing(false)
     
-    // Supabase에 녹음 결과 저장
+    // Supabase에 녹음 결과 저장 (API에서 이미 분석 완료)
     if (session && result) {
       try {
         console.log('녹음 완료:', result)
         
-        // AudioRecorder에서 받은 audioFile과 분석 결과를 함께 저장
+        // API에서 이미 분석이 완료되었으므로 파일 없이 분석 결과만 저장
         const uploadResult = await recordingAPI.uploadRecording(
           session.id, 
-          result.audioFile, // API에서 분석된 후 전달받은 오디오 파일
+          null, // audioFile은 API에서 처리했으므로 null
           {
             transcript: result.transcript || '텍스트 변환 결과 없음',
             speakers: result.speakers || [],
@@ -64,14 +64,14 @@ export default function StudentSession() {
         )
 
         if (uploadResult.success) {
-          console.log('Supabase에 녹음 결과 저장 완료:', uploadResult.data)
+          console.log('Supabase에 분석 결과 저장 완료:', uploadResult.data)
           setUploadSuccess(true)
         } else {
           throw new Error(uploadResult.error || 'Supabase 저장 실패')
         }
       } catch (error) {
-        console.error('녹음 저장 오류:', error)
-        setError(`녹음 저장 중 오류가 발생했습니다: ${error.message}`)
+        console.error('분석 결과 저장 오류:', error)
+        setError(`분석 결과 저장 중 오류가 발생했습니다: ${error.message}`)
       }
     } else {
       setUploadSuccess(true)

@@ -132,12 +132,8 @@ export default function AudioRecorder({ onRecordingComplete, onError, onAnalysis
 
       const result = await response.json()
       
-      // 분석 결과와 함께 audioBlob도 전달
-      onRecordingComplete({
-        ...result,
-        audioBlob: audioBlob,
-        audioFile: new File([audioBlob], 'recording.webm', { type: 'audio/webm' })
-      })
+      // 분석 결과만 전달 (API에서 파일 처리 완료)
+      onRecordingComplete(result)
       
       // 녹음 데이터 초기화
       resetRecording()

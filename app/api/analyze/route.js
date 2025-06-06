@@ -1,20 +1,14 @@
 import { NextResponse } from 'next/server'
-import { initializeApp } from 'firebase/app'
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
+import { createClient } from '@supabase/supabase-js'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import axios from 'axios'
-import crypto from 'crypto-js'
 
-// Firebase 설정
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCMfOKrEe89G6jnlW2A-TwDeKe8FS_K1uY",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "conversation-analyzer-67e97.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "conversation-analyzer-67e97",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "conversation-analyzer-67e97.firebasestorage.app",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "919686543413",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:919686543413:web:2efd0b1ec412a53906197c",
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-31J910Q1ZF"
-};
+// Supabase 설정
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://hgxbtjxxqjmgemtoyauh.supabase.co'
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_SERVICE_KEY_HERE'
+
+// Service role key를 사용한 Supabase 클라이언트 (Storage 권한 필요)
+const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 // CORS 헤더 설정
 const corsHeaders = {
@@ -27,17 +21,6 @@ const corsHeaders = {
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "AIzaSyBr3C6s-vWZR9LfI_Kc72jLQsI3bemd-Fk";
 // Daglo API 키
 const DAGLO_API_KEY = process.env.DAGLO_API_KEY || "LL9h2BxPTGGvjnj5zq4kDmo7";
-
-// Firebase 초기화
-let firebaseApp;
-let firebaseStorage;
-try {
-  firebaseApp = initializeApp(firebaseConfig);
-  firebaseStorage = getStorage(firebaseApp);
-  console.log('Firebase 초기화 완료');
-} catch (error) {
-  console.error('Firebase 초기화 오류:', error);
-}
 
 // OPTIONS 메서드 처리 함수 (CORS preflight 요청 처리)
 export async function OPTIONS() {
@@ -75,152 +58,96 @@ export async function POST(req) {
 
     console.log('오디오 파일 수신 완료:', audioFile.name, audioFile.size)
 
-    // 임시 모의 응답 (테스트용)
-    const mockResult = {
-      transcript: '안녕하세요. 오늘은 좋은 날씨네요. 네, 맞아요. 정말 따뜻하고 맑은 하루입니다.',
-      speakers: [
-        {
-          id: 'speaker_1',
-          name: '화자 1',
-          segments: [
-            { start: 0, end: 3, text: '안녕하세요. 오늘은 좋은 날씨네요.' }
-          ]
-        },
-        {
-          id: 'speaker_2', 
-          name: '화자 2',
-          segments: [
-            { start: 4, end: 8, text: '네, 맞아요. 정말 따뜻하고 맑은 하루입니다.' }
-          ]
-        }
-      ],
-      analysis: {
-        overall: {
-          summary: '두 화자 간의 일상적인 인사 대화입니다.',
-          tone: '친근하고 긍정적',
-          duration: 8
-        },
-        speakers: [
-          {
-            id: 'speaker_1',
-            name: '화자 1',
-            participation: 50,
-            tone: '친근함',
-            keyPoints: ['날씨에 대한 언급']
-          },
-          {
-            id: 'speaker_2',
-            name: '화자 2', 
-            participation: 50,
-            tone: '동의적',
-            keyPoints: ['긍정적인 응답']
-          }
-        ]
-      }
-    }
-
-    console.log('모의 분석 결과 반환')
-    
-    return NextResponse.json(mockResult, { headers: corsHeaders });
-
-    /* 원래 코드 (임시 주석 처리)
     // 요청 크기 확인
-    const contentLength = req.headers.get('content-length');
-    console.log('요청 크기:', contentLength ? `${Math.round(contentLength / 1024 / 1024 * 100) / 100}MB` : '알 수 없음');
-    
-    // 파일 크기 제한 (50MB)
-    const MAX_SIZE = 50 * 1024 * 1024;
-    if (contentLength && parseInt(contentLength) > MAX_SIZE) {
+    const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+    if (audioFile.size > MAX_SIZE) {
       return NextResponse.json(
-        { error: `파일 크기가 너무 큽니다. 최대 50MB까지 업로드 가능합니다. (현재: ${Math.round(contentLength / 1024 / 1024 * 100) / 100}MB)` },
+        { error: `파일 크기가 너무 큽니다. 최대 50MB까지 업로드 가능합니다. (현재: ${Math.round(audioFile.size / 1024 / 1024 * 100) / 100}MB)` },
         { status: 413, headers: corsHeaders }
       );
     }
 
-    // Firebase Storage에 업로드
-    let firebaseFileRef = null;
+    // Supabase Storage에 업로드
+    let uploadedFilePath = null;
     
     try {
       // 파일을 arrayBuffer로 변환
       const fileBuffer = await audioFile.arrayBuffer();
       
-      // 파일 업로드 확인
       console.log(`파일 크기: ${fileBuffer.byteLength} bytes`);
       
-      if (!firebaseStorage) {
-        return NextResponse.json(
-          { error: 'Firebase Storage 초기화 실패' },
-          { status: 500, headers: corsHeaders }
-        );
+      // Supabase Storage에 파일 업로드
+      const fileExt = audioFile.name ? `.${audioFile.name.split('.').pop()}` : '.webm';
+      const fileName = `audio_${Date.now()}${fileExt}`;
+      const filePath = `temp/${fileName}`;
+      
+      console.log('Supabase Storage에 파일 업로드 중...');
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('recordings')
+        .upload(filePath, fileBuffer, {
+          contentType: audioFile.type || 'audio/webm'
+        });
+
+      if (uploadError) {
+        throw new Error(`Supabase 업로드 실패: ${uploadError.message}`);
       }
       
-      try {
-        // Firebase Storage에 파일 업로드
-        const fileExt = audioFile.name ? `.${audioFile.name.split('.').pop()}` : '.tmp';
-        const fileName = `audio_${Date.now()}${fileExt}`;
-        const storageRef = ref(firebaseStorage, `uploads/${fileName}`);
-        
-        console.log('Firebase Storage에 파일 업로드 중...');
-        
-        // 파일 업로드
-        await uploadBytes(storageRef, fileBuffer);
-        
-        // 다운로드 URL 가져오기
-        const audioUrl = await getDownloadURL(storageRef);
-        
-        console.log('Firebase Storage 업로드 완료. URL:', audioUrl);
-        
-        // 파일 참조 저장
-        firebaseFileRef = storageRef;
-        
-        // Daglo API를 사용한 화자분석 및 텍스트 변환
-        const transcript = await processSpeechWithDaglo(audioUrl);
-        
-        // Gemini API를 사용한 대화 분석
-        const analysisResult = await analyzeConversation(transcript.transcript, transcript.speakers);
-        
-        // Firebase Storage에서 파일 삭제
-        if (firebaseFileRef) {
-          try {
-            await deleteObject(firebaseFileRef);
-            console.log('Firebase Storage에서 파일 삭제 완료');
-          } catch (deleteError) {
-            console.error('Firebase Storage 파일 삭제 오류:', deleteError);
-          }
+      uploadedFilePath = uploadData.path;
+      console.log('Supabase Storage 업로드 완료. Path:', uploadedFilePath);
+      
+      // 공개 URL 생성
+      const { data: { publicUrl } } = supabase.storage
+        .from('recordings')
+        .getPublicUrl(uploadedFilePath);
+      
+      console.log('공개 URL 생성 완료:', publicUrl);
+      
+      // Daglo API를 사용한 화자분석 및 텍스트 변환
+      const transcript = await processSpeechWithDaglo(publicUrl);
+      
+      // Gemini API를 사용한 대화 분석
+      const analysisResult = await analyzeConversation(transcript.transcript, transcript.speakers);
+      
+      // 임시 파일 삭제 (분석 완료 후)
+      if (uploadedFilePath) {
+        try {
+          await supabase.storage
+            .from('recordings')
+            .remove([uploadedFilePath]);
+          console.log('임시 파일 삭제 완료');
+        } catch (deleteError) {
+          console.error('임시 파일 삭제 오류:', deleteError);
         }
-
-        // 분석 결과 반환
-        return NextResponse.json({
-          transcript: transcript.transcript,
-          speakers: transcript.speakers,
-          analysis: analysisResult,
-        }, { headers: corsHeaders });
-      } catch (apiError) {
-        console.error('API 처리 오류:', apiError);
-        
-        // Firebase Storage에서 파일 삭제
-        if (firebaseFileRef) {
-          try {
-            await deleteObject(firebaseFileRef);
-            console.log('Firebase Storage에서 파일 삭제 완료');
-          } catch (deleteError) {
-            console.error('Firebase Storage 파일 삭제 오류:', deleteError);
-          }
-        }
-        
-        return NextResponse.json(
-          { error: `API 처리 오류: ${apiError.message}` },
-          { status: 500, headers: corsHeaders }
-        );
       }
+
+      // 분석 결과 반환 (파일 경로는 제거됨)
+      return NextResponse.json({
+        transcript: transcript.transcript,
+        speakers: transcript.speakers,
+        analysis: analysisResult,
+      }, { headers: corsHeaders });
+
     } catch (error) {
       console.error('파일 처리 오류:', error);
+      
+      // 오류 발생 시 임시 파일 삭제
+      if (uploadedFilePath) {
+        try {
+          await supabase.storage
+            .from('recordings')
+            .remove([uploadedFilePath]);
+          console.log('오류 시 임시 파일 삭제 완료');
+        } catch (deleteError) {
+          console.error('오류 시 임시 파일 삭제 실패:', deleteError);
+        }
+      }
+      
       return NextResponse.json(
         { error: `오디오 처리 중 오류가 발생했습니다: ${error.message}` },
         { status: 500, headers: corsHeaders }
       );
     }
-    */
   } catch (error) {
     console.error('Error processing audio:', error);
     return NextResponse.json(
