@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { sessionAPI, recordingAPI } from '../../../../lib/supabase'
 import ConversationAnalysis from '../../../components/ConversationAnalysis'
 
 export default function TeacherSessionView() {
@@ -17,28 +18,30 @@ export default function TeacherSessionView() {
 
   useEffect(() => {
     setMounted(true)
-    // 세션 정보 불러오기
-    const findSession = () => {
-      const savedSessions = localStorage.getItem('sessions')
-      if (savedSessions) {
-        const sessions = JSON.parse(savedSessions)
-        const foundSession = sessions.find(s => s.id === sessionId)
-        
-        if (foundSession) {
-          setSession(foundSession)
-        } else {
-          setError('세션을 찾을 수 없습니다.')
-        }
+    loadSessionData()
+  }, [sessionId])
+
+  const loadSessionData = async () => {
+    try {
+      setLoading(true)
+      console.log('세션 데이터 로딩 시작:', sessionId)
+      
+      const result = await sessionAPI.getSessionDetails(sessionId)
+      console.log('세션 데이터 로딩 결과:', result)
+      
+      if (result.success) {
+        setSession(result.data)
+        console.log('세션 데이터 설정 완료:', result.data)
       } else {
-        setError('세션 데이터가 없습니다.')
+        throw new Error(result.error || '세션을 찾을 수 없습니다.')
       }
+    } catch (err) {
+      console.error('세션 데이터 로딩 오류:', err)
+      setError(err.message || '세션 데이터를 불러오는 중 오류가 발생했습니다.')
+    } finally {
       setLoading(false)
     }
-
-    if (sessionId) {
-      findSession()
-    }
-  }, [sessionId])
+  }
 
   const handleBackToDashboard = () => {
     if (mounted) {
@@ -51,30 +54,26 @@ export default function TeacherSessionView() {
     alert('세션 코드가 클립보드에 복사되었습니다!')
   }
 
-  const handleDeleteRecording = (recordingId) => {
+  const handleDeleteRecording = async (recordingId) => {
     if (confirm('이 녹음을 삭제하시겠습니까?')) {
-      const savedSessions = localStorage.getItem('sessions')
-      if (savedSessions) {
-        const sessions = JSON.parse(savedSessions)
-        const updatedSessions = sessions.map(s => {
-          if (s.id === sessionId) {
-            return {
-              ...s,
-              recordings: s.recordings.filter(r => r.id !== recordingId)
-            }
+      try {
+        const result = await recordingAPI.deleteRecording(recordingId)
+        if (result.success) {
+          // 세션 데이터 다시 로드
+          await loadSessionData()
+          
+          // 선택된 녹음이 삭제된 경우 선택 해제
+          if (selectedRecording && selectedRecording.id === recordingId) {
+            setSelectedRecording(null)
           }
-          return s
-        })
-        localStorage.setItem('sessions', JSON.stringify(updatedSessions))
-        
-        // 세션 정보 업데이트
-        const updatedSession = updatedSessions.find(s => s.id === sessionId)
-        setSession(updatedSession)
-        
-        // 선택된 녹음이 삭제된 경우 선택 해제
-        if (selectedRecording && selectedRecording.id === recordingId) {
-          setSelectedRecording(null)
+          
+          alert('녹음이 삭제되었습니다.')
+        } else {
+          throw new Error(result.error || '삭제 실패')
         }
+      } catch (err) {
+        console.error('녹음 삭제 오류:', err)
+        alert(`삭제 중 오류가 발생했습니다: ${err.message}`)
       }
     }
   }
@@ -138,7 +137,7 @@ export default function TeacherSessionView() {
               </div>
             </div>
             <div className="text-sm text-gray-600">
-              생성일: {new Date(session.createdAt).toLocaleDateString()}
+              생성일: {new Date(session.created_at).toLocaleDateString()}
             </div>
           </div>
         </div>
@@ -174,8 +173,13 @@ export default function TeacherSessionView() {
                             녹음 #{index + 1}
                           </h3>
                           <p className="text-sm text-gray-500">
-                            {new Date(recording.timestamp).toLocaleString()}
+                            {new Date(recording.uploaded_at).toLocaleString()}
                           </p>
+                          {recording.file_size && (
+                            <p className="text-xs text-gray-400">
+                              크기: {Math.round(recording.file_size / 1024)} KB
+                            </p>
+                          )}
                         </div>
                         <button
                           onClick={(e) => {
@@ -205,31 +209,18 @@ export default function TeacherSessionView() {
           {/* 분석 결과 */}
           <div className="lg:col-span-2">
             {selectedRecording ? (
-              <div className="space-y-6">
-                <div className="bg-white rounded-lg shadow p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold">
-                      녹음 #{session.recordings.findIndex(r => r.id === selectedRecording.id) + 1} 분석 결과
-                    </h2>
-                    <div className="text-sm text-gray-500">
-                      {new Date(selectedRecording.timestamp).toLocaleString()}
-                    </div>
-                  </div>
-                  
-                  <ConversationAnalysis data={selectedRecording.result} />
-                </div>
-              </div>
+              <ConversationAnalysis 
+                transcript={selectedRecording.transcript}
+                speakers={selectedRecording.speakers}
+                analysis={selectedRecording.analysis}
+              />
             ) : (
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="text-center py-16">
-                  <div className="text-4xl mb-4">👈</div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    녹음을 선택하세요
-                  </h3>
-                  <p className="text-gray-500">
-                    왼쪽 목록에서 녹음을 선택하면 분석 결과를 확인할 수 있습니다
-                  </p>
-                </div>
+              <div className="bg-white rounded-lg shadow p-8 text-center">
+                <div className="text-4xl mb-4">📊</div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">분석 결과</h3>
+                <p className="text-gray-600">
+                  왼쪽에서 녹음을 선택하면 대화 분석 결과를 확인할 수 있습니다.
+                </p>
               </div>
             )}
           </div>
