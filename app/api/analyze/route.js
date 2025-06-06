@@ -39,22 +39,109 @@ export async function POST(req) {
   try {
     console.log('=== API 호출 시작 ===')
     
-    // JSON 데이터 파싱
-    let requestData;
-    try {
-      console.log('1. JSON 데이터 파싱 시작...')
-      requestData = await req.json();
-      console.log('1. JSON 데이터 파싱 완료:', {
-        hasAudioUrl: !!requestData.audioUrl,
-        hasFilePath: !!requestData.filePath
-      })
-    } catch (parseError) {
-      console.error('JSON 파싱 오류:', parseError);
+    const contentType = req.headers.get('content-type') || '';
+    console.log('Content-Type:', contentType);
+    
+    // FormData 요청 처리 (실시간 녹음용 - 즉시 분석)
+    if (contentType.includes('multipart/form-data')) {
+      console.log('FormData 요청 감지 - 즉시 분석 모드')
+      return await handleFormDataRequest(req);
+    }
+    
+    // JSON 요청 처리 (파일 업로드용 - 비동기 분석)
+    console.log('JSON 요청 감지 - 비동기 분석 모드')
+    return await handleJsonRequest(req);
+
+  } catch (error) {
+    console.error('=== 전체 API 오류 ===', error);
+    console.error('오류 스택:', error.stack);
+    return NextResponse.json(
+      { error: `오디오 처리 중 오류가 발생했습니다: ${error.message}` },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}
+
+// FormData 요청 처리 (즉시 분석)
+async function handleFormDataRequest(req) {
+  try {
+    console.log('FormData 파싱 시작...')
+    const formData = await req.formData();
+    const audioFile = formData.get('audio');
+    
+    if (!audioFile) {
       return NextResponse.json(
-        { error: `요청 데이터 처리 중 오류가 발생했습니다: ${parseError.message}` },
+        { error: '오디오 파일이 제공되지 않았습니다' },
         { status: 400, headers: corsHeaders }
       );
     }
+
+    console.log('오디오 파일 수신:', {
+      name: audioFile.name,
+      size: audioFile.size,
+      type: audioFile.type
+    });
+
+    // 파일을 임시로 Supabase에 업로드
+    const fileBuffer = await audioFile.arrayBuffer();
+    const fileName = `temp_${Date.now()}_${audioFile.name}`;
+    const filePath = `temp/${fileName}`;
+    
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('recordings')
+      .upload(filePath, fileBuffer, {
+        contentType: audioFile.type
+      });
+
+    if (uploadError) {
+      throw new Error(`파일 업로드 실패: ${uploadError.message}`);
+    }
+
+    // 공개 URL 생성
+    const { data: { publicUrl } } = supabase.storage
+      .from('recordings')
+      .getPublicUrl(uploadData.path);
+
+    console.log('임시 파일 업로드 완료:', publicUrl);
+
+    // 즉시 분석 수행
+    const transcript = await processSpeechWithDaglo(publicUrl);
+    const analysisResult = await analyzeConversation(transcript.transcript, transcript.speakers);
+
+    // 임시 파일 삭제
+    try {
+      await supabase.storage
+        .from('recordings')
+        .remove([uploadData.path]);
+      console.log('임시 파일 삭제 완료');
+    } catch (deleteError) {
+      console.error('임시 파일 삭제 오류:', deleteError);
+    }
+
+    return NextResponse.json({
+      transcript: transcript.transcript,
+      speakers: transcript.speakers,
+      analysis: analysisResult,
+    }, { headers: corsHeaders });
+
+  } catch (error) {
+    console.error('FormData 처리 오류:', error);
+    return NextResponse.json(
+      { error: `FormData 처리 중 오류가 발생했습니다: ${error.message}` },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}
+
+// JSON 요청 처리 (비동기 분석)
+async function handleJsonRequest(req) {
+  try {
+    console.log('JSON 데이터 파싱 시작...')
+    const requestData = await req.json();
+    console.log('JSON 데이터 파싱 완료:', {
+      hasAudioUrl: !!requestData.audioUrl,
+      hasFilePath: !!requestData.filePath
+    });
     
     const { audioUrl, filePath } = requestData;
     
@@ -66,65 +153,53 @@ export async function POST(req) {
       )
     }
 
-    console.log('2. 오디오 URL 수신 완료:', audioUrl)
+    console.log('오디오 URL 수신 완료:', audioUrl)
 
-    try {
-      console.log('3. URL 접근성 확인...')
-      
-      // URL 접근 가능성 테스트
-      const testResponse = await fetch(audioUrl, { method: 'HEAD' });
-      console.log('URL 접근 테스트 결과:', {
-        status: testResponse.status,
-        statusText: testResponse.statusText,
-        contentType: testResponse.headers.get('content-type'),
-        contentLength: testResponse.headers.get('content-length')
-      });
-      
-      if (!testResponse.ok) {
-        throw new Error(`오디오 파일에 접근할 수 없습니다: ${testResponse.status} ${testResponse.statusText}`);
-      }
-      
-      console.log('4. URL 접근 확인 완료')
-      
-      // Daglo API에 요청만 보내고 RID 받기
-      console.log('5. Daglo API 요청 전송...')
-      const rid = await submitToDagloAPI(audioUrl);
-      console.log('6. Daglo API 요청 완료, RID:', rid)
-
-      // RID만 반환하고 클라이언트에서 폴링하도록 함
-      return NextResponse.json({
-        status: 'processing',
-        rid: rid,
-        filePath: filePath,
-        message: '음성 분석이 시작되었습니다. 잠시 후 결과를 확인하세요.'
-      }, { headers: corsHeaders });
-
-    } catch (error) {
-      console.error('음성 분석 처리 오류:', error);
-      
-      // 오류 발생 시 임시 파일 삭제
-      if (filePath) {
-        try {
-          await supabase.storage
-            .from('recordings')
-            .remove([filePath]);
-          console.log('오류 시 임시 파일 삭제 완료');
-        } catch (deleteError) {
-          console.error('오류 시 임시 파일 삭제 실패:', deleteError);
-        }
-      }
-      
-      return NextResponse.json(
-        { error: `음성 분석 처리 중 오류가 발생했습니다: ${error.message}` },
-        { status: 500, headers: corsHeaders }
-      );
+    // URL 접근 가능성 테스트
+    const testResponse = await fetch(audioUrl, { method: 'HEAD' });
+    console.log('URL 접근 테스트 결과:', {
+      status: testResponse.status,
+      statusText: testResponse.statusText,
+      contentType: testResponse.headers.get('content-type'),
+      contentLength: testResponse.headers.get('content-length')
+    });
+    
+    if (!testResponse.ok) {
+      throw new Error(`오디오 파일에 접근할 수 없습니다: ${testResponse.status} ${testResponse.statusText}`);
     }
+    
+    console.log('URL 접근 확인 완료')
+    
+    // Daglo API에 요청만 보내고 RID 받기
+    console.log('Daglo API 요청 전송...')
+    const rid = await submitToDagloAPI(audioUrl);
+    console.log('Daglo API 요청 완료, RID:', rid)
+
+    // RID만 반환하고 클라이언트에서 폴링하도록 함
+    return NextResponse.json({
+      status: 'processing',
+      rid: rid,
+      filePath: filePath,
+      message: '음성 분석이 시작되었습니다. 잠시 후 결과를 확인하세요.'
+    }, { headers: corsHeaders });
 
   } catch (error) {
-    console.error('=== 전체 API 오류 ===', error);
-    console.error('오류 스택:', error.stack);
+    console.error('JSON 처리 오류:', error);
+    
+    // 오류 발생 시 임시 파일 삭제
+    if (requestData?.filePath) {
+      try {
+        await supabase.storage
+          .from('recordings')
+          .remove([requestData.filePath]);
+        console.log('오류 시 임시 파일 삭제 완료');
+      } catch (deleteError) {
+        console.error('오류 시 임시 파일 삭제 실패:', deleteError);
+      }
+    }
+    
     return NextResponse.json(
-      { error: `오디오 처리 중 오류가 발생했습니다: ${error.message}` },
+      { error: `JSON 처리 중 오류가 발생했습니다: ${error.message}` },
       { status: 500, headers: corsHeaders }
     );
   }
