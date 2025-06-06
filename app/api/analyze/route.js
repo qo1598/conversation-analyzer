@@ -115,8 +115,37 @@ export async function POST(req) {
       
       // Daglo API를 사용한 화자분석 및 텍스트 변환
       console.log('6. Daglo API 호출 시작...')
-      const transcript = await processSpeechWithDaglo(publicUrl);
-      console.log('7. Daglo API 완료')
+      let transcript;
+      try {
+        transcript = await processSpeechWithDaglo(publicUrl);
+        console.log('7. Daglo API 완료 - 결과:', {
+          transcriptLength: transcript.transcript?.length || 0,
+          speakersCount: Object.keys(transcript.speakers || {}).length,
+          firstSegment: transcript.transcript?.[0]
+        });
+      } catch (dagloError) {
+        console.error('Daglo API 오류:', dagloError);
+        console.log('7. Daglo API 실패 - 기본 응답 생성');
+        
+        // Daglo API 실패 시 기본 응답 생성
+        transcript = {
+          transcript: [
+            {
+              speaker: '1',
+              text: 'Daglo API 처리 중 오류가 발생했지만 파일 업로드는 성공했습니다.',
+              start: 0,
+              end: 3
+            }
+          ],
+          speakers: {
+            '1': {
+              id: '1',
+              name: '화자 1',
+              color: '#3B82F6'
+            }
+          }
+        };
+      }
       
       // 임시 파일 삭제 (분석 완료 후)
       if (uploadedFilePath) {
@@ -302,7 +331,16 @@ async function processSpeechWithDaglo(audioUrl) {
 // Daglo API 결과 변환 함수
 function convertDagloResults(dagloResult) {
   try {
-    console.log('Daglo 결과 변환 시작...');
+    console.log('=== Daglo 결과 변환 시작 ===');
+    console.log('입력 데이터 구조:', {
+      hasSTTResults: !!dagloResult.sttResults,
+      sttResultsLength: dagloResult.sttResults?.length || 0,
+      firstSTTResult: dagloResult.sttResults?.[0] ? {
+        hasTranscript: !!dagloResult.sttResults[0].transcript,
+        hasWords: !!dagloResult.sttResults[0].words,
+        wordsLength: dagloResult.sttResults[0].words?.length || 0
+      } : null
+    });
     
     // 화자 색상 지정
     const speakerColors = {
@@ -321,84 +359,97 @@ function convertDagloResults(dagloResult) {
       const sttResult = dagloResult.sttResults[0];
       
       console.log('=== STT 결과 분석 ===');
-      console.log('전체 transcript:', sttResult.transcript);
+      console.log('전체 transcript:', sttResult.transcript?.substring(0, 100) + '...');
       console.log('words 배열 길이:', sttResult.words ? sttResult.words.length : 0);
       
       if (sttResult.words && sttResult.words.length > 0) {
-        console.log('=== 첫 10개 단어 분석 ===');
-        sttResult.words.slice(0, 10).forEach((word, index) => {
-          console.log(`${index + 1}. 단어: "${word.word}", speaker: ${word.speaker}, segmentId: ${word.segmentId}, 시작: ${word.startTime?.seconds}s`);
+        console.log('=== 첫 5개 단어 분석 ===');
+        sttResult.words.slice(0, 5).forEach((word, index) => {
+          console.log(`${index + 1}. 단어: "${word.word}", speaker: ${word.speaker}, 시작: ${word.startTime?.seconds}s`);
         });
         
-        // speaker 필드를 기준으로 화자별 세그먼트 생성
-        let currentSpeaker = null;
-        let currentText = '';
-        let segmentStart = null;
-        let segmentEnd = null;
-        let speakers = new Set();
-        
-        for (const word of sttResult.words) {
-          const speakerId = word.speaker || '1'; // 실제 화자 ID 사용
-          const startTime = parseFloat(word.startTime?.seconds || 0) + (word.startTime?.nanos || 0) / 1000000000;
-          const endTime = parseFloat(word.endTime?.seconds || 0) + (word.endTime?.nanos || 0) / 1000000000;
+        try {
+          // speaker 필드를 기준으로 화자별 세그먼트 생성
+          let currentSpeaker = null;
+          let currentText = '';
+          let segmentStart = null;
+          let segmentEnd = null;
+          let speakers = new Set();
           
-          speakers.add(speakerId);
-          
-          // 새로운 화자이거나 첫 번째 단어인 경우
-          if (currentSpeaker !== speakerId) {
-            // 이전 세그먼트를 저장
-            if (currentSpeaker !== null && currentText.trim()) {
-              segments.push({
-                speaker: currentSpeaker,
-                text: currentText.trim(),
-                start: segmentStart,
-                end: segmentEnd
-              });
-            }
+          for (const word of sttResult.words) {
+            const speakerId = word.speaker || '1'; // 실제 화자 ID 사용
+            const startTime = parseFloat(word.startTime?.seconds || 0) + (word.startTime?.nanos || 0) / 1000000000;
+            const endTime = parseFloat(word.endTime?.seconds || 0) + (word.endTime?.nanos || 0) / 1000000000;
             
-            // 새 세그먼트 시작
-            currentSpeaker = speakerId;
-            currentText = word.word || '';
-            segmentStart = startTime;
-            segmentEnd = endTime;
-          } else {
-            // 같은 화자인 경우 텍스트 연결
-            if (word.word) {
-              currentText += word.word;
+            speakers.add(speakerId);
+            
+            // 새로운 화자이거나 첫 번째 단어인 경우
+            if (currentSpeaker !== speakerId) {
+              // 이전 세그먼트를 저장
+              if (currentSpeaker !== null && currentText.trim()) {
+                segments.push({
+                  speaker: currentSpeaker,
+                  text: currentText.trim(),
+                  start: segmentStart,
+                  end: segmentEnd
+                });
+              }
+              
+              // 새 세그먼트 시작
+              currentSpeaker = speakerId;
+              currentText = word.word || '';
+              segmentStart = startTime;
+              segmentEnd = endTime;
+            } else {
+              // 같은 화자인 경우 텍스트 연결
+              if (word.word) {
+                currentText += word.word;
+              }
+              segmentEnd = endTime;
             }
-            segmentEnd = endTime;
           }
-        }
-        
-        // 마지막 세그먼트 저장
-        if (currentSpeaker !== null && currentText.trim()) {
-          segments.push({
-            speaker: currentSpeaker,
-            text: currentText.trim(),
-            start: segmentStart,
-            end: segmentEnd
+          
+          // 마지막 세그먼트 저장
+          if (currentSpeaker !== null && currentText.trim()) {
+            segments.push({
+              speaker: currentSpeaker,
+              text: currentText.trim(),
+              start: segmentStart,
+              end: segmentEnd
+            });
+          }
+          
+          // 화자 정보 생성 (실제 사용된 speaker ID 기반)
+          Array.from(speakers).forEach(speakerId => {
+            const speakerNumber = parseInt(speakerId);
+            speakersMap[speakerId] = {
+              id: speakerId,
+              name: `화자 ${speakerNumber}`,
+              color: speakerColors[speakerId] || '#374151'
+            };
           });
-        }
-        
-        // 화자 정보 생성 (실제 사용된 speaker ID 기반)
-        Array.from(speakers).forEach(speakerId => {
-          const speakerNumber = parseInt(speakerId);
-          speakersMap[speakerId] = {
-            id: speakerId,
-            name: `화자 ${speakerNumber}`,
-            color: speakerColors[speakerId] || '#374151'
+          
+          console.log('=== 세그먼트 생성 결과 ===');
+          console.log('고유 speaker ID 목록:', Array.from(speakers));
+          console.log('생성된 세그먼트 수:', segments.length);
+          console.log('화자 수:', Object.keys(speakersMap).length);
+          
+        } catch (processingError) {
+          console.error('단어 처리 중 오류:', processingError);
+          // 단어 처리 실패 시 전체 텍스트만 사용
+          segments.push({
+            speaker: '1',
+            text: sttResult.transcript || '음성 인식 결과가 있지만 처리 중 오류가 발생했습니다',
+            start: 0,
+            end: 10
+          });
+          
+          speakersMap['1'] = {
+            id: '1',
+            name: '화자 1',
+            color: speakerColors['1']
           };
-        });
-        
-        console.log('=== 세그먼트 생성 결과 ===');
-        console.log('고유 speaker ID 목록:', Array.from(speakers));
-        console.log('생성된 세그먼트 수:', segments.length);
-        console.log('화자 수:', Object.keys(speakersMap).length);
-        
-        // 각 세그먼트 미리보기
-        segments.slice(0, 10).forEach((segment, index) => {
-          console.log(`세그먼트 ${index + 1}: 화자 ${segment.speaker} - "${segment.text.substring(0, 50)}..."`);
-        });
+        }
         
       } else {
         // 단어 정보가 없는 경우 전체 텍스트만 사용
@@ -438,13 +489,36 @@ function convertDagloResults(dagloResult) {
     console.log(`화자 수: ${Object.keys(speakersMap).length}`);
     console.log('화자 ID 목록:', Object.keys(speakersMap));
     
-    return {
+    const result = {
       transcript: segments,
       speakers: speakersMap
     };
+    
+    console.log('변환 완료, 결과 반환');
+    return result;
+    
   } catch (error) {
-    console.error('Daglo 결과 변환 오류:', error);
-    throw new Error(`결과 변환 중 오류 발생: ${error.message}`);
+    console.error('=== Daglo 결과 변환 오류 ===', error);
+    console.error('오류 스택:', error.stack);
+    
+    // 변환 실패 시 기본 응답 반환
+    return {
+      transcript: [
+        {
+          speaker: '1',
+          text: '결과 변환 중 오류가 발생했습니다',
+          start: 0,
+          end: 1
+        }
+      ],
+      speakers: {
+        '1': {
+          id: '1',
+          name: '화자 1',
+          color: '#3B82F6'
+        }
+      }
+    };
   }
 }
 
