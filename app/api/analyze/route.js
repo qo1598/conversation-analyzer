@@ -113,6 +113,24 @@ export async function POST(req) {
       
       console.log('5. 공개 URL 생성 완료:', publicUrl);
       
+      // URL 접근 가능성 테스트
+      try {
+        console.log('5.1. URL 접근 테스트 시작...');
+        const testResponse = await fetch(publicUrl, { method: 'HEAD' });
+        console.log('5.2. URL 접근 테스트 결과:', {
+          status: testResponse.status,
+          statusText: testResponse.statusText,
+          headers: Object.fromEntries(testResponse.headers.entries())
+        });
+        
+        if (!testResponse.ok) {
+          throw new Error(`URL 접근 실패: ${testResponse.status} ${testResponse.statusText}`);
+        }
+      } catch (urlError) {
+        console.error('5.3. URL 접근 오류:', urlError);
+        throw new Error(`업로드된 파일에 접근할 수 없습니다: ${urlError.message}`);
+      }
+      
       // Daglo API를 사용한 화자분석 및 텍스트 변환
       console.log('6. Daglo API 호출 시작...')
       let transcript;
@@ -287,12 +305,20 @@ async function processSpeechWithDaglo(audioUrl) {
     // 1단계: 트랜스크립션 요청
     console.log('Daglo API 트랜스크립션 요청 중...');
     console.log('요청 옵션:', JSON.stringify(requestOptions, null, 2));
+    console.log('요청 URL:', apiUrl);
+    console.log('Authorization 헤더:', `Bearer ${DAGLO_API_KEY.substring(0, 10)}...`);
     
     const submitResponse = await axios.post(apiUrl, requestOptions, {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${DAGLO_API_KEY}`
       }
+    });
+    
+    console.log('Daglo API 제출 응답:', {
+      status: submitResponse.status,
+      statusText: submitResponse.statusText,
+      data: submitResponse.data
     });
     
     if (!submitResponse.data || !submitResponse.data.rid) {
