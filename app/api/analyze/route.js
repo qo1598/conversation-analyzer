@@ -75,54 +75,7 @@ export async function POST(req) {
       );
     }
 
-    // 임시로 간단한 응답 반환 (실제 API 호출 전 테스트)
-    console.log('3. 임시 응답 반환 (API 호출 건너뛰기)')
-    
-    const simpleResult = {
-      transcript: [
-        {
-          speaker: '1',
-          text: '테스트 음성 파일이 성공적으로 업로드되었습니다.',
-          start: 0,
-          end: 3
-        }
-      ],
-      speakers: {
-        '1': {
-          id: '1',
-          name: '화자 1',
-          color: '#3B82F6'
-        }
-      },
-      analysis: {
-        overall: {
-          criteria: [
-            { name: "의사소통 명확성", score: 0.8, feedback: "테스트 업로드가 성공했습니다." }
-          ],
-          summary: "파일 업로드 테스트가 완료되었습니다."
-        },
-        speakers: {
-          '1': {
-            criteria: [
-              { name: "발화 명확성", score: 0.8, feedback: "테스트 중입니다." }
-            ],
-            summary: "테스트 화자입니다."
-          }
-        },
-        interaction: {
-          criteria: [
-            { name: "상호작용 빈도", score: 0.8, feedback: "테스트 중입니다." }
-          ],
-          summary: "테스트 상호작용입니다."
-        }
-      }
-    }
-
-    console.log('4. 응답 반환 완료')
-    return NextResponse.json(simpleResult, { headers: corsHeaders });
-
-    /* 실제 API 호출 코드 (임시 주석 처리)
-    // Supabase Storage에 업로드
+    // Supabase Storage 업로드 테스트
     let uploadedFilePath = null;
     
     try {
@@ -160,38 +113,64 @@ export async function POST(req) {
       
       console.log('5. 공개 URL 생성 완료:', publicUrl);
       
-      // Daglo API를 사용한 화자분석 및 텍스트 변환
-      console.log('6. Daglo API 호출 시작...')
-      const transcript = await processSpeechWithDaglo(publicUrl);
-      console.log('7. Daglo API 완료')
-      
-      // Gemini API를 사용한 대화 분석
-      console.log('8. Gemini API 호출 시작...')
-      const analysisResult = await analyzeConversation(transcript.transcript, transcript.speakers);
-      console.log('9. Gemini API 완료')
-      
-      // 임시 파일 삭제 (분석 완료 후)
+      // 임시 파일 삭제 (테스트 완료 후)
       if (uploadedFilePath) {
         try {
           await supabase.storage
             .from('recordings')
             .remove([uploadedFilePath]);
-          console.log('10. 임시 파일 삭제 완료');
+          console.log('6. 임시 파일 삭제 완료');
         } catch (deleteError) {
           console.error('임시 파일 삭제 오류:', deleteError);
         }
       }
 
-      console.log('11. 최종 응답 반환')
-      // 분석 결과 반환 (파일 경로는 제거됨)
-      return NextResponse.json({
-        transcript: transcript.transcript,
-        speakers: transcript.speakers,
-        analysis: analysisResult,
-      }, { headers: corsHeaders });
+      // Storage 테스트 성공 응답
+      const storageTestResult = {
+        transcript: [
+          {
+            speaker: '1',
+            text: 'Supabase Storage 업로드가 성공적으로 완료되었습니다.',
+            start: 0,
+            end: 3
+          }
+        ],
+        speakers: {
+          '1': {
+            id: '1',
+            name: '화자 1',
+            color: '#3B82F6'
+          }
+        },
+        analysis: {
+          overall: {
+            criteria: [
+              { name: "의사소통 명확성", score: 0.9, feedback: "Storage 업로드 테스트가 성공했습니다." }
+            ],
+            summary: "파일이 Supabase Storage에 성공적으로 업로드되었습니다."
+          },
+          speakers: {
+            '1': {
+              criteria: [
+                { name: "발화 명확성", score: 0.9, feedback: "Storage 테스트 중입니다." }
+              ],
+              summary: "Storage 테스트 화자입니다."
+            }
+          },
+          interaction: {
+            criteria: [
+              { name: "상호작용 빈도", score: 0.9, feedback: "Storage 테스트 중입니다." }
+            ],
+            summary: "Storage 테스트 상호작용입니다."
+          }
+        }
+      }
+
+      console.log('7. Storage 테스트 응답 반환 완료')
+      return NextResponse.json(storageTestResult, { headers: corsHeaders });
 
     } catch (error) {
-      console.error('파일 처리 오류:', error);
+      console.error('Supabase Storage 처리 오류:', error);
       
       // 오류 발생 시 임시 파일 삭제
       if (uploadedFilePath) {
@@ -206,10 +185,29 @@ export async function POST(req) {
       }
       
       return NextResponse.json(
-        { error: `오디오 처리 중 오류가 발생했습니다: ${error.message}` },
+        { error: `Supabase Storage 처리 중 오류가 발생했습니다: ${error.message}` },
         { status: 500, headers: corsHeaders }
       );
     }
+
+    /* Daglo + Gemini API 호출 코드 (다음 단계에서 활성화)
+    // Daglo API를 사용한 화자분석 및 텍스트 변환
+    console.log('6. Daglo API 호출 시작...')
+    const transcript = await processSpeechWithDaglo(publicUrl);
+    console.log('7. Daglo API 완료')
+    
+    // Gemini API를 사용한 대화 분석
+    console.log('8. Gemini API 호출 시작...')
+    const analysisResult = await analyzeConversation(transcript.transcript, transcript.speakers);
+    console.log('9. Gemini API 완료')
+
+    console.log('11. 최종 응답 반환')
+    // 분석 결과 반환 (파일 경로는 제거됨)
+    return NextResponse.json({
+      transcript: transcript.transcript,
+      speakers: transcript.speakers,
+      analysis: analysisResult,
+    }, { headers: corsHeaders });
     */
   } catch (error) {
     console.error('=== 전체 API 오류 ===', error);
