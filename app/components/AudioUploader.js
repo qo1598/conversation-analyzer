@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { fileAPI } from '../../lib/supabase'
 
-// 최대 파일 크기 (10MB) - Vercel 업로드 제한 고려
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+// 최대 파일 크기 (50MB) - 클라이언트 업로드로 제한 완화
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onError }) {
   const [file, setFile] = useState(null)
@@ -11,6 +12,7 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
   const [fileSize, setFileSize] = useState(0)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadedFilePath, setUploadedFilePath] = useState(null)
   const inputRef = useRef(null)
 
   const handleDrag = (e) => {
@@ -59,13 +61,14 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
 
     // 파일 크기 확인
     if (file.size > MAX_FILE_SIZE) {
-      onError(`파일 크기가 너무 큽니다. 최대 10MB까지 업로드 가능합니다. 현재 파일 크기: ${formatFileSize(file.size)}`)
+      onError(`파일 크기가 너무 큽니다. 최대 50MB까지 업로드 가능합니다. 현재 파일 크기: ${formatFileSize(file.size)}`)
       return
     }
 
     setFile(file)
     setFileSize(file.size)
     setUploadProgress(0)
+    setUploadedFilePath(null)
   }
 
   const handleAnalyze = async () => {
@@ -78,17 +81,31 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
     setUploading(true)
 
     try {
-      // API 호출하여 분석 진행
+      // 1단계: Supabase Storage에 파일 업로드
+      console.log('1. Supabase에 파일 업로드 시작...')
       setUploadProgress(20);
       
-      const formData = new FormData();
-      formData.append('audio', file);
+      const uploadResult = await fileAPI.uploadTempFile(file)
       
+      if (!uploadResult.success) {
+        throw new Error(`파일 업로드 실패: ${uploadResult.error}`)
+      }
+      
+      setUploadedFilePath(uploadResult.data.path)
       setUploadProgress(40);
       
+      console.log('2. 파일 업로드 완료, 분석 API 호출...')
+      
+      // 2단계: 분석 API 호출 (URL만 전달)
       const response = await fetch('/api/analyze', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          audioUrl: uploadResult.data.url,
+          filePath: uploadResult.data.path
+        })
       });
       
       setUploadProgress(80);
@@ -106,9 +123,21 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
       } else {
         onError('응답 데이터가 없습니다.');
       }
+      
     } catch (error) {
       setUploading(false);
       console.error('분석 오류:', error);
+      
+      // 오류 발생 시 업로드된 파일 삭제
+      if (uploadedFilePath) {
+        try {
+          await fileAPI.deleteTempFile(uploadedFilePath)
+          console.log('오류 시 임시 파일 삭제 완료')
+        } catch (deleteError) {
+          console.error('임시 파일 삭제 실패:', deleteError)
+        }
+      }
+      
       onError(error.message || '파일 분석 중 오류가 발생했습니다.');
     }
   }
@@ -138,7 +167,9 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
         
         {uploading ? (
           <div>
-            <p className="text-blue-600 font-medium">파일 업로드 중...</p>
+            <p className="text-blue-600 font-medium">
+              {uploadProgress < 50 ? '파일 업로드 중...' : '음성 분석 중...'}
+            </p>
             <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2 mb-1">
               <div 
                 className="bg-blue-600 h-2.5 rounded-full" 
@@ -149,7 +180,7 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
           </div>
         ) : file ? (
           <div>
-            <p className="text-green-600 font-medium">파일 업로드 완료!</p>
+            <p className="text-green-600 font-medium">파일 선택 완료!</p>
             <p className="text-sm text-gray-500 mt-1">{file.name}</p>
             <p className="text-sm text-gray-500">{formatFileSize(fileSize)}</p>
           </div>
@@ -157,7 +188,7 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
           <div>
             <p className="text-gray-600">녹음 파일을 여기에 끌어다 놓거나 클릭하여 선택하세요</p>
             <p className="text-sm text-gray-500 mt-1">지원 형식: .mp3, .wav, .m4a</p>
-            <p className="text-sm text-gray-500">최대 파일 크기: 10MB</p>
+            <p className="text-sm text-gray-500">최대 파일 크기: 50MB</p>
           </div>
         )}
       </div>

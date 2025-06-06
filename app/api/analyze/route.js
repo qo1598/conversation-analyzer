@@ -39,123 +39,60 @@ export async function POST(req) {
   try {
     console.log('=== API 호출 시작 ===')
     
-    // 파일 업로드 처리 - req.formData() 사용
-    let formData;
+    // JSON 데이터 파싱
+    let requestData;
     try {
-      console.log('1. FormData 파싱 시작...')
-      formData = await req.formData();
-      console.log('1. FormData 파싱 완료')
-    } catch (formError) {
-      console.error('FormData 파싱 오류:', formError);
+      console.log('1. JSON 데이터 파싱 시작...')
+      requestData = await req.json();
+      console.log('1. JSON 데이터 파싱 완료:', {
+        hasAudioUrl: !!requestData.audioUrl,
+        hasFilePath: !!requestData.filePath
+      })
+    } catch (parseError) {
+      console.error('JSON 파싱 오류:', parseError);
       return NextResponse.json(
-        { error: `요청 데이터 처리 중 오류가 발생했습니다: ${formError.message}` },
+        { error: `요청 데이터 처리 중 오류가 발생했습니다: ${parseError.message}` },
         { status: 400, headers: corsHeaders }
       );
     }
     
-    const audioFile = formData.get('audio');
+    const { audioUrl, filePath } = requestData;
     
-    if (!audioFile) {
-      console.error('오디오 파일이 없음')
+    if (!audioUrl) {
+      console.error('오디오 URL이 없음')
       return NextResponse.json(
-        { error: '업로드된 오디오 파일이 없습니다' },
+        { error: '오디오 URL이 제공되지 않았습니다' },
         { status: 400, headers: corsHeaders }
       )
     }
 
-    console.log('2. 오디오 파일 수신 완료:', {
-      name: audioFile.name,
-      size: audioFile.size,
-      type: audioFile.type
-    })
+    console.log('2. 오디오 URL 수신 완료:', audioUrl)
 
-    // 요청 크기 확인
-    const MAX_SIZE = 10 * 1024 * 1024; // 10MB로 통일 (Vercel 제한 고려)
-    if (audioFile.size > MAX_SIZE) {
-      console.error('파일 크기 초과:', audioFile.size)
-      return NextResponse.json(
-        { error: `파일 크기가 너무 큽니다. 최대 10MB까지 업로드 가능합니다. (현재: ${Math.round(audioFile.size / 1024 / 1024 * 100) / 100}MB)` },
-        { status: 413, headers: corsHeaders }
-      );
-    }
-
-    // Supabase Storage 업로드 테스트
-    let uploadedFilePath = null;
-    
     try {
-      console.log('3. Supabase Storage 업로드 시작...')
-      
-      // 파일을 arrayBuffer로 변환
-      const fileBuffer = await audioFile.arrayBuffer();
-      console.log(`파일 버퍼 생성 완료: ${fileBuffer.byteLength} bytes`);
-      
-      // Supabase Storage에 파일 업로드
-      const fileExt = audioFile.name ? `.${audioFile.name.split('.').pop()}` : '.webm';
-      const fileName = `audio_${Date.now()}${fileExt}`;
-      const filePath = `temp/${fileName}`;
-      
-      console.log('Supabase Storage에 파일 업로드 중...', filePath);
-      
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('recordings')
-        .upload(filePath, fileBuffer, {
-          contentType: audioFile.type || 'audio/webm'
-        });
-
-      if (uploadError) {
-        console.error('Supabase 업로드 오류:', uploadError)
-        throw new Error(`Supabase 업로드 실패: ${uploadError.message}`);
-      }
-      
-      uploadedFilePath = uploadData.path;
-      console.log('4. Supabase Storage 업로드 완료. Path:', uploadedFilePath);
-      
-      // 공개 URL 생성
-      const { data: { publicUrl } } = supabase.storage
-        .from('recordings')
-        .getPublicUrl(uploadedFilePath);
-      
-      console.log('5. 공개 URL 생성 완료:', publicUrl);
+      console.log('3. URL 접근성 확인...')
       
       // URL 접근 가능성 테스트
-      try {
-        console.log('5.1. URL 접근 테스트 시작...');
-        const testResponse = await fetch(publicUrl, { method: 'HEAD' });
-        console.log('5.2. URL 접근 테스트 결과:', {
-          status: testResponse.status,
-          statusText: testResponse.statusText,
-          headers: Object.fromEntries(testResponse.headers.entries())
-        });
-        
-        if (!testResponse.ok) {
-          throw new Error(`URL 접근 실패: ${testResponse.status} ${testResponse.statusText}`);
-        }
-        
-        // GET 요청으로도 테스트
-        console.log('5.3. GET 요청 테스트 시작...');
-        const getResponse = await fetch(publicUrl);
-        console.log('5.4. GET 요청 결과:', {
-          status: getResponse.status,
-          contentType: getResponse.headers.get('content-type'),
-          contentLength: getResponse.headers.get('content-length')
-        });
-        
-        if (!getResponse.ok) {
-          throw new Error(`GET 요청 실패: ${getResponse.status} ${getResponse.statusText}`);
-        }
-        
-      } catch (urlError) {
-        console.error('5.5. URL 접근 오류:', urlError);
-        throw new Error(`업로드된 파일에 접근할 수 없습니다: ${urlError.message}`);
+      const testResponse = await fetch(audioUrl, { method: 'HEAD' });
+      console.log('URL 접근 테스트 결과:', {
+        status: testResponse.status,
+        statusText: testResponse.statusText,
+        contentType: testResponse.headers.get('content-type'),
+        contentLength: testResponse.headers.get('content-length')
+      });
+      
+      if (!testResponse.ok) {
+        throw new Error(`오디오 파일에 접근할 수 없습니다: ${testResponse.status} ${testResponse.statusText}`);
       }
       
+      console.log('4. URL 접근 확인 완료')
+      
       // Daglo API를 사용한 화자분석 및 텍스트 변환
-      console.log('6. Daglo API 호출 시작...')
+      console.log('5. Daglo API 호출 시작...')
       let transcript;
       
       try {
-        transcript = await processSpeechWithDaglo(publicUrl);
-        console.log('7. Daglo API 완료 - 결과:', {
+        transcript = await processSpeechWithDaglo(audioUrl);
+        console.log('6. Daglo API 완료 - 결과:', {
           transcriptLength: transcript.transcript?.length || 0,
           speakersCount: Object.keys(transcript.speakers || {}).length,
           firstSegment: transcript.transcript?.[0]
@@ -165,12 +102,12 @@ export async function POST(req) {
         console.error('오류 메시지:', dagloError.message);
         console.error('오류 스택:', dagloError.stack);
         
-        // 임시 파일 삭제
-        if (uploadedFilePath) {
+        // 임시 파일 삭제 (filePath가 있는 경우)
+        if (filePath) {
           try {
             await supabase.storage
               .from('recordings')
-              .remove([uploadedFilePath]);
+              .remove([filePath]);
             console.log('오류 시 임시 파일 삭제 완료');
           } catch (deleteError) {
             console.error('오류 시 임시 파일 삭제 실패:', deleteError);
@@ -199,24 +136,24 @@ export async function POST(req) {
       }
 
       // 임시 파일 삭제 (분석 완료 후)
-      if (uploadedFilePath) {
+      if (filePath) {
         try {
           await supabase.storage
             .from('recordings')
-            .remove([uploadedFilePath]);
-          console.log('8. 임시 파일 삭제 완료');
+            .remove([filePath]);
+          console.log('7. 임시 파일 삭제 완료');
         } catch (deleteError) {
           console.error('임시 파일 삭제 오류:', deleteError);
         }
       }
 
       // Gemini API를 사용한 대화 분석
-      console.log('9. Gemini API 호출 시작...')
+      console.log('8. Gemini API 호출 시작...')
       const analysisResult = await analyzeConversation(transcript.transcript, transcript.speakers);
-      console.log('10. Gemini API 완료')
+      console.log('9. Gemini API 완료')
 
-      console.log('11. 최종 응답 반환')
-      // 분석 결과 반환 (파일 경로는 제거됨)
+      console.log('10. 최종 응답 반환')
+      // 분석 결과 반환
       return NextResponse.json({
         transcript: transcript.transcript,
         speakers: transcript.speakers,
@@ -224,14 +161,14 @@ export async function POST(req) {
       }, { headers: corsHeaders });
 
     } catch (error) {
-      console.error('Supabase Storage + Daglo API 처리 오류:', error);
+      console.error('음성 분석 처리 오류:', error);
       
       // 오류 발생 시 임시 파일 삭제
-      if (uploadedFilePath) {
+      if (filePath) {
         try {
           await supabase.storage
             .from('recordings')
-            .remove([uploadedFilePath]);
+            .remove([filePath]);
           console.log('오류 시 임시 파일 삭제 완료');
         } catch (deleteError) {
           console.error('오류 시 임시 파일 삭제 실패:', deleteError);
