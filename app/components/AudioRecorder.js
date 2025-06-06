@@ -164,32 +164,134 @@ export default function AudioRecorder({ onRecordingComplete, onError, onAnalysis
     }
     
     try {
-      const formData = new FormData()
-      formData.append('audio', audioBlob, 'recording.' + audioBlob.selectedExtension)
+      console.log('1. Supabase에 파일 업로드 시작...')
       
+      // 1단계: Supabase Storage에 직접 업로드
+      const fileName = `session_${sessionId}_${Date.now()}.${audioBlob.selectedExtension || 'webm'}`
+      const filePath = `temp/${fileName}`
+      
+      // 파일을 arrayBuffer로 변환
+      const fileBuffer = await audioBlob.arrayBuffer()
+      
+      // Supabase Storage에 업로드
+      const { data: uploadData, error: uploadError } = await window.supabase?.storage
+        ?.from('recordings')
+        ?.upload(filePath, fileBuffer, {
+          contentType: audioBlob.type || 'audio/webm'
+        })
+      
+      // Supabase가 없으면 fileAPI 사용
+      let uploadResult
+      if (!window.supabase) {
+        // fileAPI 사용 (동적 import)
+        const { fileAPI } = await import('../../lib/supabase')
+        uploadResult = await fileAPI.uploadTempFile(audioBlob)
+        
+        if (!uploadResult.success) {
+          throw new Error(`파일 업로드 실패: ${uploadResult.error}`)
+        }
+      } else {
+        if (uploadError) {
+          throw new Error(`파일 업로드 실패: ${uploadError.message}`)
+        }
+        
+        // 공개 URL 생성
+        const { data: { publicUrl } } = window.supabase.storage
+          .from('recordings')
+          .getPublicUrl(uploadData.path)
+        
+        uploadResult = {
+          success: true,
+          data: {
+            path: uploadData.path,
+            url: publicUrl
+          }
+        }
+      }
+      
+      console.log('2. 파일 업로드 완료, 분석 API 호출...')
+      
+      // 2단계: 분석 API 호출 (JSON 방식)
       const response = await fetch('/api/analyze', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          audioUrl: uploadResult.data.url,
+          filePath: uploadResult.data.path
+        })
       })
 
       if (!response.ok) {
-        throw new Error('업로드 실패')
+        throw new Error(`서버 응답 오류: ${response.status}`)
       }
 
-      const result = await response.json()
+      const data = await response.json()
       
-      // 분석 결과만 전달 (API에서 파일 처리 완료)
-      onRecordingComplete(result)
-      
-      // 녹음 데이터 초기화
-      resetRecording()
+      if (data.status === 'processing' && data.rid) {
+        console.log('3. 분석 요청 성공, RID:', data.rid)
+        
+        // 3단계: 폴링으로 결과 확인
+        const result = await pollForResults(data.rid, data.filePath)
+        
+        if (result) {
+          // 분석 결과만 전달 (API에서 파일 처리 완료)
+          onRecordingComplete(result)
+          
+          // 녹음 데이터 초기화
+          resetRecording()
+        } else {
+          throw new Error('분석 결과를 받지 못했습니다.')
+        }
+      } else {
+        throw new Error(data.error || '분석 요청 실패')
+      }
       
     } catch (err) {
       console.error('업로드 오류:', err)
-      onError('녹음 파일 업로드 중 오류가 발생했습니다.')
+      onError(`녹음 파일 업로드 중 오류가 발생했습니다: ${err.message}`)
     } finally {
       setIsUploading(false)
     }
+  }
+
+  // 폴링으로 결과 확인
+  const pollForResults = async (rid, filePath) => {
+    const maxRetries = 30 // 최대 5분 대기
+    const retryInterval = 10000 // 10초마다 확인
+    
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        console.log(`결과 확인 중... (${i + 1}/${maxRetries})`)
+        
+        const response = await fetch(`/api/analyze-status?rid=${rid}&filePath=${filePath}`)
+        
+        if (!response.ok) {
+          throw new Error(`상태 확인 오류: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        
+        if (data.status === 'completed') {
+          console.log('분석 완료!')
+          return data
+        } else if (data.status === 'error') {
+          throw new Error(data.error)
+        }
+        
+        // 아직 처리 중이면 대기
+        if (i < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, retryInterval))
+        }
+        
+      } catch (error) {
+        console.error('폴링 오류:', error)
+        throw error
+      }
+    }
+    
+    throw new Error('분석 시간이 너무 오래 걸립니다. 더 짧은 파일을 사용해보세요.')
   }
 
   const resetRecording = () => {
