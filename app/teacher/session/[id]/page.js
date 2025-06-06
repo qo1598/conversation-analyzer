@@ -175,7 +175,14 @@ export default function TeacherSessionView() {
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
-                      onClick={() => setSelectedRecording(recording)}
+                      onClick={() => {
+                        console.log('=== 녹음 클릭 ===')
+                        console.log('선택된 녹음 데이터:', recording)
+                        console.log('transcript:', recording.transcript)
+                        console.log('speakers:', recording.speakers)
+                        console.log('analysis:', recording.analysis)
+                        setSelectedRecording(recording)
+                      }}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -220,9 +227,11 @@ export default function TeacherSessionView() {
           <div className="lg:col-span-2">
             {selectedRecording ? (
               <ConversationAnalysis 
-                transcript={selectedRecording.transcript}
-                speakers={selectedRecording.speakers}
-                analysis={selectedRecording.analysis}
+                data={{
+                  transcript: selectedRecording.transcript,
+                  speakers: selectedRecording.speakers,
+                  analysis: selectedRecording.analysis
+                }}
               />
             ) : (
               <div className="bg-white rounded-lg shadow p-8 text-center">

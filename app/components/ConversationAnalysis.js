@@ -8,9 +8,26 @@ export default function ConversationAnalysis({ data }) {
   const [analysisView, setAnalysisView] = useState('overall')
   const [selectedAnalysisSpeaker, setSelectedAnalysisSpeaker] = useState('') // 화자별 분석용 선택
 
-  if (!data) return null
+  console.log('=== ConversationAnalysis 컴포넌트 ===')
+  console.log('받은 data:', data)
+  
+  if (!data) {
+    console.log('data가 없음')
+    return null
+  }
 
   const { transcript, speakers, analysis } = data
+  
+  console.log('추출된 데이터:', {
+    transcript: transcript,
+    transcriptType: typeof transcript,
+    transcriptLength: transcript?.length,
+    speakers: speakers,
+    speakersType: typeof speakers,
+    speakersKeys: Object.keys(speakers || {}),
+    analysis: analysis,
+    analysisType: typeof analysis
+  })
 
   // 선택된 화자에 따라 대화 필터링
   const filteredTranscript = selectedSpeaker === 'all' 
