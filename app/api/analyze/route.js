@@ -214,6 +214,15 @@ async function processSpeechWithDaglo(audioUrl) {
         source: {
           url: audioUrl
         }
+      },
+      // 화자 분리 설정 추가
+      config: {
+        diarization: {
+          enabled: true,
+          min_speakers: 2,
+          max_speakers: 6
+        },
+        language: "ko-KR"
       }
     };
     
@@ -340,9 +349,16 @@ function convertDagloResults(dagloResult) {
           let segmentStart = null;
           let segmentEnd = null;
           let speakers = new Set();
+          let wordCount = 0; // 연속된 단어 카운트
           
           for (const word of sttResult.words) {
-            const speakerId = word.speaker || '1'; // 실제 화자 ID 사용
+            // speaker 필드에서 실제 화자 ID 추출 (문자열이나 숫자 모두 처리)
+            let speakerId = word.speaker;
+            if (typeof speakerId === 'object' && speakerId !== null) {
+              speakerId = speakerId.id || speakerId.speaker_id || '1';
+            }
+            speakerId = String(speakerId || '1');
+            
             const startTime = parseFloat(word.startTime?.seconds || 0) + (word.startTime?.nanos || 0) / 1000000000;
             const endTime = parseFloat(word.endTime?.seconds || 0) + (word.endTime?.nanos || 0) / 1000000000;
             
@@ -350,8 +366,8 @@ function convertDagloResults(dagloResult) {
             
             // 새로운 화자이거나 첫 번째 단어인 경우
             if (currentSpeaker !== speakerId) {
-              // 이전 세그먼트를 저장
-              if (currentSpeaker !== null && currentText.trim()) {
+              // 이전 세그먼트를 저장 (충분한 길이가 있는 경우만)
+              if (currentSpeaker !== null && currentText.trim() && wordCount >= 2) {
                 segments.push({
                   speaker: currentSpeaker,
                   text: currentText.trim(),
@@ -365,17 +381,19 @@ function convertDagloResults(dagloResult) {
               currentText = word.word || '';
               segmentStart = startTime;
               segmentEnd = endTime;
+              wordCount = 1;
             } else {
               // 같은 화자인 경우 텍스트 연결
               if (word.word) {
                 currentText += word.word;
+                wordCount++;
               }
               segmentEnd = endTime;
             }
           }
           
           // 마지막 세그먼트 저장
-          if (currentSpeaker !== null && currentText.trim()) {
+          if (currentSpeaker !== null && currentText.trim() && wordCount >= 2) {
             segments.push({
               speaker: currentSpeaker,
               text: currentText.trim(),
@@ -386,18 +404,24 @@ function convertDagloResults(dagloResult) {
           
           // 화자 정보 생성 (실제 사용된 speaker ID 기반)
           Array.from(speakers).forEach(speakerId => {
-            const speakerNumber = parseInt(speakerId);
+            const speakerNumber = parseInt(speakerId) || parseInt(speakerId.replace(/\D/g, '')) || 1;
             speakersMap[speakerId] = {
               id: speakerId,
               name: `화자 ${speakerNumber}`,
-              color: speakerColors[speakerId] || '#374151'
+              color: speakerColors[speakerId] || speakerColors[String(speakerNumber)] || '#374151'
             };
           });
           
-          console.log('=== 세그먼트 생성 결과 ===');
+          console.log('=== 화자 분리 결과 ===');
+          console.log('감지된 화자 수:', speakers.size);
           console.log('고유 speaker ID 목록:', Array.from(speakers));
           console.log('생성된 세그먼트 수:', segments.length);
-          console.log('화자 수:', Object.keys(speakersMap).length);
+          console.log('화자별 세그먼트 분포:', 
+            Array.from(speakers).map(id => ({
+              speakerId: id,
+              segmentCount: segments.filter(s => s.speaker === id).length
+            }))
+          );
           
         } catch (processingError) {
           console.error('단어 처리 중 오류:', processingError);
