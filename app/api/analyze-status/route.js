@@ -144,32 +144,17 @@ function convertDagloResults(dagloResult) {
       const sttResult = dagloResult.sttResults[0];
       
       if (sttResult.words && sttResult.words.length > 0) {
-        // 1단계: 모든 고유 segmentId 수집
-        const allSegmentIds = new Set();
+        // 1단계: 모든 고유 화자 ID 수집 (speaker 필드 우선 사용)
+        const allSpeakers = new Set();
         sttResult.words.forEach(word => {
-          const segmentId = word.segmentId || word.speaker || '1';
-          allSegmentIds.add(segmentId);
+          const speakerId = word.speaker || '1'; // speaker 필드를 우선 사용
+          allSpeakers.add(speakerId);
         });
         
-        console.log(`원본 segment 수: ${allSegmentIds.size}`);
+        console.log(`감지된 화자 수: ${allSpeakers.size}`);
+        console.log('화자 ID 목록:', Array.from(allSpeakers));
         
-        // 2단계: segmentId를 실제 화자로 매핑 (최대 6명)
-        const segmentToSpeaker = {};
-        const sortedSegmentIds = Array.from(allSegmentIds).sort();
-        
-        // segmentId를 그룹화하여 실제 화자 수 줄이기
-        const maxSpeakers = 6;
-        const segmentGroupSize = Math.ceil(sortedSegmentIds.length / maxSpeakers);
-        
-        sortedSegmentIds.forEach((segmentId, index) => {
-          const speakerNumber = Math.min(Math.floor(index / segmentGroupSize) + 1, maxSpeakers);
-          segmentToSpeaker[segmentId] = speakerNumber.toString();
-        });
-        
-        console.log(`화자 매핑 결과:`, Object.keys(segmentToSpeaker).length, '개 segment → ', 
-                   new Set(Object.values(segmentToSpeaker)).size, '명 화자');
-        
-        // 3단계: 매핑된 화자로 세그먼트 생성
+        // 2단계: 화자별 세그먼트 생성 (speaker 필드 기준)
         let currentSpeaker = null;
         let currentText = '';
         let segmentStart = null;
@@ -177,14 +162,13 @@ function convertDagloResults(dagloResult) {
         let wordCount = 0;
         
         for (const word of sttResult.words) {
-          const originalSegmentId = word.segmentId || word.speaker || '1';
-          const mappedSpeaker = segmentToSpeaker[originalSegmentId] || '1';
+          const speakerId = word.speaker || '1'; // speaker 필드 사용
           const startTime = parseFloat(word.startTime?.seconds || 0) + (word.startTime?.nanos || 0) / 1000000000;
           const endTime = parseFloat(word.endTime?.seconds || 0) + (word.endTime?.nanos || 0) / 1000000000;
           
-          if (currentSpeaker !== mappedSpeaker) {
+          if (currentSpeaker !== speakerId) {
             // 이전 세그먼트 저장 (충분한 길이가 있는 경우만)
-            if (currentSpeaker !== null && currentText.trim() && wordCount >= 3) {
+            if (currentSpeaker !== null && currentText.trim() && wordCount >= 2) {
               segments.push({
                 speaker: currentSpeaker,
                 text: currentText.trim(),
@@ -194,7 +178,7 @@ function convertDagloResults(dagloResult) {
             }
             
             // 새 세그먼트 시작
-            currentSpeaker = mappedSpeaker;
+            currentSpeaker = speakerId;
             currentText = word.word || '';
             segmentStart = startTime;
             segmentEnd = endTime;
@@ -210,7 +194,7 @@ function convertDagloResults(dagloResult) {
         }
         
         // 마지막 세그먼트 저장
-        if (currentSpeaker !== null && currentText.trim() && wordCount >= 3) {
+        if (currentSpeaker !== null && currentText.trim() && wordCount >= 2) {
           segments.push({
             speaker: currentSpeaker,
             text: currentText.trim(),
@@ -219,14 +203,14 @@ function convertDagloResults(dagloResult) {
           });
         }
         
-        // 4단계: 화자 정보 생성 (실제 사용된 화자만)
+        // 3단계: 화자 정보 생성 (실제 사용된 화자만)
         const usedSpeakers = new Set(segments.map(s => s.speaker));
         usedSpeakers.forEach(speakerId => {
           const speakerNumber = parseInt(speakerId) || 1;
           speakersMap[speakerId] = {
             id: speakerId,
             name: `화자 ${speakerNumber}`,
-            color: speakerColors[speakerId] || '#374151'
+            color: speakerColors[speakerId] || speakerColors[String(speakerNumber)] || '#374151'
           };
         });
         
