@@ -206,37 +206,18 @@ export async function POST(req) {
         }
       }
 
-      // Daglo 테스트 성공 응답 (Gemini 분석 없이)
-      const dagloTestResult = {
+      // Gemini API를 사용한 대화 분석
+      console.log('9. Gemini API 호출 시작...')
+      const analysisResult = await analyzeConversation(transcript.transcript, transcript.speakers);
+      console.log('10. Gemini API 완료')
+
+      console.log('11. 최종 응답 반환')
+      // 분석 결과 반환 (파일 경로는 제거됨)
+      return NextResponse.json({
         transcript: transcript.transcript,
         speakers: transcript.speakers,
-        analysis: {
-          overall: {
-            criteria: [
-              { name: "의사소통 명확성", score: 0.85, feedback: "Daglo API 음성 분석이 성공적으로 완료되었습니다." }
-            ],
-            summary: "음성이 텍스트로 변환되고 화자가 분리되었습니다."
-          },
-          speakers: Object.keys(transcript.speakers).reduce((acc, speakerId) => {
-            acc[speakerId] = {
-              criteria: [
-                { name: "발화 명확성", score: 0.85, feedback: "Daglo API로 화자 분석이 완료되었습니다." }
-              ],
-              summary: `${transcript.speakers[speakerId].name}의 발화가 인식되었습니다.`
-            };
-            return acc;
-          }, {}),
-          interaction: {
-            criteria: [
-              { name: "상호작용 빈도", score: 0.85, feedback: "화자간 대화가 분석되었습니다." }
-            ],
-            summary: "Daglo API를 통한 화자 분리가 완료되었습니다."
-          }
-        }
-      }
-
-      console.log('9. Daglo 테스트 응답 반환 완료')
-      return NextResponse.json(dagloTestResult, { headers: corsHeaders });
+        analysis: analysisResult,
+      }, { headers: corsHeaders });
 
     } catch (error) {
       console.error('Supabase Storage + Daglo API 처리 오류:', error);
@@ -259,20 +240,6 @@ export async function POST(req) {
       );
     }
 
-    /* Gemini API 호출 코드 (마지막 단계에서 활성화)
-    // Gemini API를 사용한 대화 분석
-    console.log('8. Gemini API 호출 시작...')
-    const analysisResult = await analyzeConversation(transcript.transcript, transcript.speakers);
-    console.log('9. Gemini API 완료')
-
-    console.log('11. 최종 응답 반환')
-    // 분석 결과 반환 (파일 경로는 제거됨)
-    return NextResponse.json({
-      transcript: transcript.transcript,
-      speakers: transcript.speakers,
-      analysis: analysisResult,
-    }, { headers: corsHeaders });
-    */
   } catch (error) {
     console.error('=== 전체 API 오류 ===', error);
     console.error('오류 스택:', error.stack);
