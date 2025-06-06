@@ -166,47 +166,12 @@ export default function AudioRecorder({ onRecordingComplete, onError, onAnalysis
     try {
       console.log('1. Supabase에 파일 업로드 시작...')
       
-      // 1단계: Supabase Storage에 직접 업로드
-      const fileName = `session_${sessionId}_${Date.now()}.${audioBlob.selectedExtension || 'webm'}`
-      const filePath = `temp/${fileName}`
+      // 1단계: fileAPI를 사용하여 Supabase Storage에 업로드
+      const { fileAPI } = await import('../../lib/supabase')
+      const uploadResult = await fileAPI.uploadTempFile(audioBlob)
       
-      // 파일을 arrayBuffer로 변환
-      const fileBuffer = await audioBlob.arrayBuffer()
-      
-      // Supabase Storage에 업로드
-      const { data: uploadData, error: uploadError } = await window.supabase?.storage
-        ?.from('recordings')
-        ?.upload(filePath, fileBuffer, {
-          contentType: audioBlob.type || 'audio/webm'
-        })
-      
-      // Supabase가 없으면 fileAPI 사용
-      let uploadResult
-      if (!window.supabase) {
-        // fileAPI 사용 (동적 import)
-        const { fileAPI } = await import('../../lib/supabase')
-        uploadResult = await fileAPI.uploadTempFile(audioBlob)
-        
-        if (!uploadResult.success) {
-          throw new Error(`파일 업로드 실패: ${uploadResult.error}`)
-        }
-      } else {
-        if (uploadError) {
-          throw new Error(`파일 업로드 실패: ${uploadError.message}`)
-        }
-        
-        // 공개 URL 생성
-        const { data: { publicUrl } } = window.supabase.storage
-          .from('recordings')
-          .getPublicUrl(uploadData.path)
-        
-        uploadResult = {
-          success: true,
-          data: {
-            path: uploadData.path,
-            url: publicUrl
-          }
-        }
+      if (!uploadResult.success) {
+        throw new Error(`파일 업로드 실패: ${uploadResult.error}`)
       }
       
       console.log('2. 파일 업로드 완료, 분석 API 호출...')
