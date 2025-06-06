@@ -26,6 +26,9 @@
   "functions": {
     "app/api/**/*.js": {
       "maxDuration": 60
+    },
+    "app/api/analyze/route.js": {
+      "maxDuration": 300
     }
   },
   "rewrites": [
@@ -33,5 +36,12 @@
       "source": "/api/(.*)",
       "destination": "/api/$1"
     }
-  ]
+  ],
+  "limits": {
+    "functions": {
+      "app/api/analyze/route.js": {
+        "maxDuration": 300
+      }
+    }
+  }
 } 

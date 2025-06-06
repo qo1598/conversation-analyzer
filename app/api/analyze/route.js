@@ -66,11 +66,11 @@ export async function POST(req) {
     })
 
     // 요청 크기 확인
-    const MAX_SIZE = 100 * 1024 * 1024; // 100MB로 복구 (원래 설정)
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB로 통일 (Vercel 제한 고려)
     if (audioFile.size > MAX_SIZE) {
       console.error('파일 크기 초과:', audioFile.size)
       return NextResponse.json(
-        { error: `파일 크기가 너무 큽니다. 최대 100MB까지 업로드 가능합니다. (현재: ${Math.round(audioFile.size / 1024 / 1024 * 100) / 100}MB)` },
+        { error: `파일 크기가 너무 큽니다. 최대 10MB까지 업로드 가능합니다. (현재: ${Math.round(audioFile.size / 1024 / 1024 * 100) / 100}MB)` },
         { status: 413, headers: corsHeaders }
       );
     }

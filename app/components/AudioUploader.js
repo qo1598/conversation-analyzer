@@ -2,8 +2,8 @@
 
 import { useState, useRef } from 'react'
 
-// 최대 파일 크기 (40MB)
-const MAX_FILE_SIZE = 40 * 1024 * 1024;
+// 최대 파일 크기 (10MB) - Vercel 업로드 제한 고려
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onError }) {
   const [file, setFile] = useState(null)
@@ -59,7 +59,7 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
 
     // 파일 크기 확인
     if (file.size > MAX_FILE_SIZE) {
-      onError(`파일 크기가 너무 큽니다. 최대 40MB까지 업로드 가능합니다. 현재 파일 크기: ${formatFileSize(file.size)}`)
+      onError(`파일 크기가 너무 큽니다. 최대 10MB까지 업로드 가능합니다. 현재 파일 크기: ${formatFileSize(file.size)}`)
       return
     }
 
@@ -157,7 +157,7 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
           <div>
             <p className="text-gray-600">녹음 파일을 여기에 끌어다 놓거나 클릭하여 선택하세요</p>
             <p className="text-sm text-gray-500 mt-1">지원 형식: .mp3, .wav, .m4a</p>
-            <p className="text-sm text-gray-500">최대 파일 크기: 40MB</p>
+            <p className="text-sm text-gray-500">최대 파일 크기: 10MB</p>
           </div>
         )}
       </div>
