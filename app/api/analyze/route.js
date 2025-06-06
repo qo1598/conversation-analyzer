@@ -150,7 +150,7 @@ export async function POST(req) {
       let transcript;
       
       try {
-        transcript = await processSpeechWithDaglo(publicUrl, fileBuffer);
+        transcript = await processSpeechWithDaglo(publicUrl);
         console.log('7. Daglo API 완료 - 결과:', {
           transcriptLength: transcript.transcript?.length || 0,
           speakersCount: Object.keys(transcript.speakers || {}).length,
@@ -284,7 +284,7 @@ export async function POST(req) {
 }
 
 // Daglo API를 사용한 화자 분리 및 텍스트 변환 함수
-async function processSpeechWithDaglo(audioUrl, audioBuffer = null) {
+async function processSpeechWithDaglo(audioUrl) {
   try {
     console.log('Daglo API 트랜스크립션 시작...');
     
@@ -294,104 +294,48 @@ async function processSpeechWithDaglo(audioUrl, audioBuffer = null) {
     }
     
     console.log('Daglo API 키 확인 완료, API 호출 시작...');
+    console.log('사용 URL:', audioUrl);
     
     // API 요청 URL
     const apiUrl = 'https://apis.daglo.ai/stt/v1/async/transcripts';
     
-    // 파일 직접 업로드 방식으로 시도
-    if (audioBuffer) {
-      console.log('파일 직접 업로드 방식 시도...');
-      
-      // FormData로 파일 직접 전송
-      const formData = new FormData();
-      const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' });
-      formData.append('audio', audioBlob, 'recording.webm');
-      
-      // STT 설정을 JSON으로 추가
-      const sttConfig = {
-        speakerDiarization: {
-          enable: true,
-          maxSpeakers: 6
-        },
-        wordAlignment: true,
-        punctuation: true
-      };
-      formData.append('sttConfig', JSON.stringify(sttConfig));
-      
-      console.log('파일 직접 업로드 요청 중...');
-      
-      const submitResponse = await axios.post(apiUrl, formData, {
-        headers: {
-          'Authorization': `Bearer ${DAGLO_API_KEY}`,
-          'Content-Type': 'multipart/form-data'
+    // Daglo API 요청 옵션 (공식 문서에 따른 정확한 구조)
+    const requestOptions = {
+      audio: {
+        source: {
+          url: audioUrl
         }
-      });
-      
-      console.log('파일 직접 업로드 응답:', {
-        status: submitResponse.status,
-        data: submitResponse.data
-      });
-      
-      if (!submitResponse.data || !submitResponse.data.rid) {
-        throw new Error('Daglo API 요청 응답에서 RID를 찾을 수 없습니다.');
       }
-      
-      const rid = submitResponse.data.rid;
-      console.log('트랜스크립션 요청 완료. RID:', rid);
-      
-      // 결과 폴링은 동일
-      return await pollDagloResults(rid);
-      
-    } else {
-      // 기존 URL 방식
-      console.log('URL 방식으로 시도...');
-      console.log('사용 URL:', audioUrl);
-      
-      // Daglo API 요청 옵션 (공식 문서에 따른 올바른 구조)
-      const requestOptions = {
-        audio: {
-          source: {
-            url: audioUrl
-          }
-        },
-        sttConfig: {
-          speakerDiarization: {
-            enable: true,
-            maxSpeakers: 6
-          },
-          wordAlignment: true,
-          punctuation: true
-        }
-      };
-      
-      // 1단계: 트랜스크립션 요청
-      console.log('Daglo API 트랜스크립션 요청 중...');
-      console.log('요청 옵션:', JSON.stringify(requestOptions, null, 2));
-      console.log('요청 URL:', apiUrl);
-      console.log('Authorization 헤더:', `Bearer ${DAGLO_API_KEY.substring(0, 10)}...`);
-      
-      const submitResponse = await axios.post(apiUrl, requestOptions, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${DAGLO_API_KEY}`
-        }
-      });
-      
-      console.log('Daglo API 제출 응답:', {
-        status: submitResponse.status,
-        statusText: submitResponse.statusText,
-        data: submitResponse.data
-      });
-      
-      if (!submitResponse.data || !submitResponse.data.rid) {
-        throw new Error('Daglo API 요청 응답에서 RID를 찾을 수 없습니다.');
-      }
-      
-      const rid = submitResponse.data.rid;
-      console.log('트랜스크립션 요청 완료. RID:', rid);
-      
-      return await pollDagloResults(rid);
+    };
+    
+    // 1단계: 트랜스크립션 요청
+    console.log('Daglo API 트랜스크립션 요청 중...');
+    console.log('요청 옵션:', JSON.stringify(requestOptions, null, 2));
+    console.log('요청 URL:', apiUrl);
+    console.log('Authorization 헤더:', `Bearer ${DAGLO_API_KEY.substring(0, 10)}...`);
+    
+    const submitResponse = await axios.post(apiUrl, requestOptions, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${DAGLO_API_KEY}`
+      },
+      timeout: 30000 // 30초 타임아웃
+    });
+    
+    console.log('Daglo API 제출 응답:', {
+      status: submitResponse.status,
+      statusText: submitResponse.statusText,
+      data: submitResponse.data
+    });
+    
+    if (!submitResponse.data || !submitResponse.data.rid) {
+      throw new Error('Daglo API 요청 응답에서 RID를 찾을 수 없습니다.');
     }
+    
+    const rid = submitResponse.data.rid;
+    console.log('트랜스크립션 요청 완료. RID:', rid);
+    
+    return await pollDagloResults(rid);
     
   } catch (error) {
     console.error('Daglo API 오류:', error);
