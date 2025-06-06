@@ -96,7 +96,7 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
       
       console.log('2. 파일 업로드 완료, 분석 API 호출...')
       
-      // 2단계: 분석 API 호출 (URL만 전달)
+      // 2단계: 분석 API 호출 (RID만 받기)
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: {
@@ -108,20 +108,30 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
         })
       });
       
-      setUploadProgress(80);
+      setUploadProgress(60);
       
       if (!response.ok) {
         throw new Error(`서버 응답 오류: ${response.status}`);
       }
       
       const data = await response.json();
-      setUploading(false);
-      setUploadProgress(100);
+      
+      if (data.status === 'processing' && data.rid) {
+        console.log('3. 분석 요청 성공, RID:', data.rid);
+        
+        // 3단계: 폴링으로 결과 확인
+        const result = await pollForResults(data.rid, data.filePath);
+        
+        setUploading(false);
+        setUploadProgress(100);
 
-      if (data) {
-        onAnalysisComplete(data);
+        if (result) {
+          onAnalysisComplete(result);
+        } else {
+          onError('분석 결과를 받지 못했습니다.');
+        }
       } else {
-        onError('응답 데이터가 없습니다.');
+        throw new Error(data.error || '분석 요청 실패');
       }
       
     } catch (error) {
@@ -140,6 +150,48 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
       
       onError(error.message || '파일 분석 중 오류가 발생했습니다.');
     }
+  }
+
+  // 폴링으로 결과 확인
+  const pollForResults = async (rid, filePath) => {
+    const maxRetries = 30; // 최대 5분 대기
+    const retryInterval = 10000; // 10초마다 확인
+    
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        console.log(`결과 확인 중... (${i + 1}/${maxRetries})`);
+        
+        // 진행률 업데이트 (60% ~ 95%)
+        const progress = 60 + (i / maxRetries) * 35;
+        setUploadProgress(Math.round(progress));
+        
+        const response = await fetch(`/api/analyze-status?rid=${rid}&filePath=${filePath}`);
+        
+        if (!response.ok) {
+          throw new Error(`상태 확인 오류: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.status === 'completed') {
+          console.log('분석 완료!');
+          return data;
+        } else if (data.status === 'error') {
+          throw new Error(data.error);
+        }
+        
+        // 아직 처리 중이면 대기
+        if (i < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, retryInterval));
+        }
+        
+      } catch (error) {
+        console.error('폴링 오류:', error);
+        throw error;
+      }
+    }
+    
+    throw new Error('분석 시간이 너무 오래 걸립니다. 더 짧은 파일을 사용해보세요.');
   }
   
   return (
