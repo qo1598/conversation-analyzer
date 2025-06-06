@@ -124,27 +124,27 @@ export async function POST(req) {
           firstSegment: transcript.transcript?.[0]
         });
       } catch (dagloError) {
-        console.error('Daglo API 오류:', dagloError);
-        console.log('7. Daglo API 실패 - 기본 응답 생성');
+        console.error('=== Daglo API 상세 오류 ===', dagloError);
+        console.error('오류 메시지:', dagloError.message);
+        console.error('오류 스택:', dagloError.stack);
         
-        // Daglo API 실패 시 기본 응답 생성
-        transcript = {
-          transcript: [
-            {
-              speaker: '1',
-              text: 'Daglo API 처리 중 오류가 발생했지만 파일 업로드는 성공했습니다.',
-              start: 0,
-              end: 3
-            }
-          ],
-          speakers: {
-            '1': {
-              id: '1',
-              name: '화자 1',
-              color: '#3B82F6'
-            }
+        // 임시 파일 삭제
+        if (uploadedFilePath) {
+          try {
+            await supabase.storage
+              .from('recordings')
+              .remove([uploadedFilePath]);
+            console.log('오류 시 임시 파일 삭제 완료');
+          } catch (deleteError) {
+            console.error('오류 시 임시 파일 삭제 실패:', deleteError);
           }
-        };
+        }
+        
+        // 실제 오류를 반환하여 문제 파악
+        return NextResponse.json(
+          { error: `Daglo API 오류: ${dagloError.message}` },
+          { status: 500, headers: corsHeaders }
+        );
       }
       
       // 임시 파일 삭제 (분석 완료 후)
