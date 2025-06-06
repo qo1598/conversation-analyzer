@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 
-export default function AudioRecorder({ onRecordingComplete, onError, onAnalysisStart }) {
+export default function AudioRecorder({ onRecordingComplete, onError, onAnalysisStart, sessionId }) {
   const [isRecording, setIsRecording] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [duration, setDuration] = useState(0)
@@ -131,7 +131,13 @@ export default function AudioRecorder({ onRecordingComplete, onError, onAnalysis
       }
 
       const result = await response.json()
-      onRecordingComplete(result)
+      
+      // 분석 결과와 함께 audioBlob도 전달
+      onRecordingComplete({
+        ...result,
+        audioBlob: audioBlob,
+        audioFile: new File([audioBlob], 'recording.webm', { type: 'audio/webm' })
+      })
       
       // 녹음 데이터 초기화
       resetRecording()
