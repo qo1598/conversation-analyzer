@@ -181,7 +181,13 @@ export default function TeacherSessionView() {
                         console.log('transcript:', recording.transcript)
                         console.log('speakers:', recording.speakers)
                         console.log('analysis:', recording.analysis)
-                        setSelectedRecording(recording)
+                        
+                        // 토글 기능: 같은 녹음을 다시 클릭하면 선택 해제
+                        if (selectedRecording?.id === recording.id) {
+                          setSelectedRecording(null)
+                        } else {
+                          setSelectedRecording(recording)
+                        }
                       }}
                     >
                       <div className="flex items-center justify-between">
@@ -192,7 +198,8 @@ export default function TeacherSessionView() {
                           <p className="text-sm text-gray-500">
                             {new Date(recording.uploaded_at).toLocaleString()}
                           </p>
-                          {recording.file_size && (
+                          {/* 파일 크기가 있고 0이 아닐 때만 표시 */}
+                          {recording.file_size && recording.file_size > 0 && (
                             <p className="text-xs text-gray-400">
                               크기: {Math.round(recording.file_size / 1024)} KB
                             </p>
@@ -239,6 +246,9 @@ export default function TeacherSessionView() {
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">분석 결과</h3>
                 <p className="text-gray-600">
                   왼쪽에서 녹음을 선택하면 대화 분석 결과를 확인할 수 있습니다.
+                </p>
+                <p className="text-sm text-gray-500 mt-2">
+                  💡 같은 녹음을 다시 클릭하면 분석 결과를 닫을 수 있습니다.
                 </p>
               </div>
             )}
