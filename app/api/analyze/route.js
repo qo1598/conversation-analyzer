@@ -33,12 +33,14 @@ export async function OPTIONS() {
 // POST 요청 처리
 export async function POST(req) {
   try {
-    console.log('API 호출 시작')
+    console.log('=== API 호출 시작 ===')
     
     // 파일 업로드 처리 - req.formData() 사용
     let formData;
     try {
+      console.log('1. FormData 파싱 시작...')
       formData = await req.formData();
+      console.log('1. FormData 파싱 완료')
     } catch (formError) {
       console.error('FormData 파싱 오류:', formError);
       return NextResponse.json(
@@ -50,38 +52,92 @@ export async function POST(req) {
     const audioFile = formData.get('audio');
     
     if (!audioFile) {
+      console.error('오디오 파일이 없음')
       return NextResponse.json(
         { error: '업로드된 오디오 파일이 없습니다' },
         { status: 400, headers: corsHeaders }
       )
     }
 
-    console.log('오디오 파일 수신 완료:', audioFile.name, audioFile.size)
+    console.log('2. 오디오 파일 수신 완료:', {
+      name: audioFile.name,
+      size: audioFile.size,
+      type: audioFile.type
+    })
 
     // 요청 크기 확인
     const MAX_SIZE = 50 * 1024 * 1024; // 50MB
     if (audioFile.size > MAX_SIZE) {
+      console.error('파일 크기 초과:', audioFile.size)
       return NextResponse.json(
         { error: `파일 크기가 너무 큽니다. 최대 50MB까지 업로드 가능합니다. (현재: ${Math.round(audioFile.size / 1024 / 1024 * 100) / 100}MB)` },
         { status: 413, headers: corsHeaders }
       );
     }
 
+    // 임시로 간단한 응답 반환 (실제 API 호출 전 테스트)
+    console.log('3. 임시 응답 반환 (API 호출 건너뛰기)')
+    
+    const simpleResult = {
+      transcript: [
+        {
+          speaker: '1',
+          text: '테스트 음성 파일이 성공적으로 업로드되었습니다.',
+          start: 0,
+          end: 3
+        }
+      ],
+      speakers: {
+        '1': {
+          id: '1',
+          name: '화자 1',
+          color: '#3B82F6'
+        }
+      },
+      analysis: {
+        overall: {
+          criteria: [
+            { name: "의사소통 명확성", score: 0.8, feedback: "테스트 업로드가 성공했습니다." }
+          ],
+          summary: "파일 업로드 테스트가 완료되었습니다."
+        },
+        speakers: {
+          '1': {
+            criteria: [
+              { name: "발화 명확성", score: 0.8, feedback: "테스트 중입니다." }
+            ],
+            summary: "테스트 화자입니다."
+          }
+        },
+        interaction: {
+          criteria: [
+            { name: "상호작용 빈도", score: 0.8, feedback: "테스트 중입니다." }
+          ],
+          summary: "테스트 상호작용입니다."
+        }
+      }
+    }
+
+    console.log('4. 응답 반환 완료')
+    return NextResponse.json(simpleResult, { headers: corsHeaders });
+
+    /* 실제 API 호출 코드 (임시 주석 처리)
     // Supabase Storage에 업로드
     let uploadedFilePath = null;
     
     try {
+      console.log('3. Supabase Storage 업로드 시작...')
+      
       // 파일을 arrayBuffer로 변환
       const fileBuffer = await audioFile.arrayBuffer();
-      
-      console.log(`파일 크기: ${fileBuffer.byteLength} bytes`);
+      console.log(`파일 버퍼 생성 완료: ${fileBuffer.byteLength} bytes`);
       
       // Supabase Storage에 파일 업로드
       const fileExt = audioFile.name ? `.${audioFile.name.split('.').pop()}` : '.webm';
       const fileName = `audio_${Date.now()}${fileExt}`;
       const filePath = `temp/${fileName}`;
       
-      console.log('Supabase Storage에 파일 업로드 중...');
+      console.log('Supabase Storage에 파일 업로드 중...', filePath);
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('recordings')
@@ -90,24 +146,29 @@ export async function POST(req) {
         });
 
       if (uploadError) {
+        console.error('Supabase 업로드 오류:', uploadError)
         throw new Error(`Supabase 업로드 실패: ${uploadError.message}`);
       }
       
       uploadedFilePath = uploadData.path;
-      console.log('Supabase Storage 업로드 완료. Path:', uploadedFilePath);
+      console.log('4. Supabase Storage 업로드 완료. Path:', uploadedFilePath);
       
       // 공개 URL 생성
       const { data: { publicUrl } } = supabase.storage
         .from('recordings')
         .getPublicUrl(uploadedFilePath);
       
-      console.log('공개 URL 생성 완료:', publicUrl);
+      console.log('5. 공개 URL 생성 완료:', publicUrl);
       
       // Daglo API를 사용한 화자분석 및 텍스트 변환
+      console.log('6. Daglo API 호출 시작...')
       const transcript = await processSpeechWithDaglo(publicUrl);
+      console.log('7. Daglo API 완료')
       
       // Gemini API를 사용한 대화 분석
+      console.log('8. Gemini API 호출 시작...')
       const analysisResult = await analyzeConversation(transcript.transcript, transcript.speakers);
+      console.log('9. Gemini API 완료')
       
       // 임시 파일 삭제 (분석 완료 후)
       if (uploadedFilePath) {
@@ -115,12 +176,13 @@ export async function POST(req) {
           await supabase.storage
             .from('recordings')
             .remove([uploadedFilePath]);
-          console.log('임시 파일 삭제 완료');
+          console.log('10. 임시 파일 삭제 완료');
         } catch (deleteError) {
           console.error('임시 파일 삭제 오류:', deleteError);
         }
       }
 
+      console.log('11. 최종 응답 반환')
       // 분석 결과 반환 (파일 경로는 제거됨)
       return NextResponse.json({
         transcript: transcript.transcript,
@@ -148,8 +210,10 @@ export async function POST(req) {
         { status: 500, headers: corsHeaders }
       );
     }
+    */
   } catch (error) {
-    console.error('Error processing audio:', error);
+    console.error('=== 전체 API 오류 ===', error);
+    console.error('오류 스택:', error.stack);
     return NextResponse.json(
       { error: `오디오 처리 중 오류가 발생했습니다: ${error.message}` },
       { status: 500, headers: corsHeaders }
