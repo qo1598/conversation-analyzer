@@ -16,11 +16,6 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-31J910Q1ZF"
 };
 
-// App Router 설정
-export const config = {
-  runtime: 'edge',
-};
-
 // CORS 헤더 설정
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -55,6 +50,80 @@ export async function OPTIONS() {
 // POST 요청 처리
 export async function POST(req) {
   try {
+    console.log('API 호출 시작')
+    
+    // 파일 업로드 처리 - req.formData() 사용
+    let formData;
+    try {
+      formData = await req.formData();
+    } catch (formError) {
+      console.error('FormData 파싱 오류:', formError);
+      return NextResponse.json(
+        { error: `요청 데이터 처리 중 오류가 발생했습니다: ${formError.message}` },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    
+    const audioFile = formData.get('audio');
+    
+    if (!audioFile) {
+      return NextResponse.json(
+        { error: '업로드된 오디오 파일이 없습니다' },
+        { status: 400, headers: corsHeaders }
+      )
+    }
+
+    console.log('오디오 파일 수신 완료:', audioFile.name, audioFile.size)
+
+    // 임시 모의 응답 (테스트용)
+    const mockResult = {
+      transcript: '안녕하세요. 오늘은 좋은 날씨네요. 네, 맞아요. 정말 따뜻하고 맑은 하루입니다.',
+      speakers: [
+        {
+          id: 'speaker_1',
+          name: '화자 1',
+          segments: [
+            { start: 0, end: 3, text: '안녕하세요. 오늘은 좋은 날씨네요.' }
+          ]
+        },
+        {
+          id: 'speaker_2', 
+          name: '화자 2',
+          segments: [
+            { start: 4, end: 8, text: '네, 맞아요. 정말 따뜻하고 맑은 하루입니다.' }
+          ]
+        }
+      ],
+      analysis: {
+        overall: {
+          summary: '두 화자 간의 일상적인 인사 대화입니다.',
+          tone: '친근하고 긍정적',
+          duration: 8
+        },
+        speakers: [
+          {
+            id: 'speaker_1',
+            name: '화자 1',
+            participation: 50,
+            tone: '친근함',
+            keyPoints: ['날씨에 대한 언급']
+          },
+          {
+            id: 'speaker_2',
+            name: '화자 2', 
+            participation: 50,
+            tone: '동의적',
+            keyPoints: ['긍정적인 응답']
+          }
+        ]
+      }
+    }
+
+    console.log('모의 분석 결과 반환')
+    
+    return NextResponse.json(mockResult, { headers: corsHeaders });
+
+    /* 원래 코드 (임시 주석 처리)
     // 요청 크기 확인
     const contentLength = req.headers.get('content-length');
     console.log('요청 크기:', contentLength ? `${Math.round(contentLength / 1024 / 1024 * 100) / 100}MB` : '알 수 없음');
@@ -66,27 +135,6 @@ export async function POST(req) {
         { error: `파일 크기가 너무 큽니다. 최대 50MB까지 업로드 가능합니다. (현재: ${Math.round(contentLength / 1024 / 1024 * 100) / 100}MB)` },
         { status: 413, headers: corsHeaders }
       );
-    }
-    
-    // 파일 업로드 처리 - req.formData() 사용
-    let formData;
-    try {
-      formData = await req.formData();
-    } catch (formError) {
-      console.error('FormData 파싱 오류:', formError);
-      return NextResponse.json(
-        { error: `요청 데이터 처리 중 오류가 발생했습니다: ${formError.message}` },
-        { status: 400 }
-      );
-    }
-    
-    const audioFile = formData.get('audio');
-    
-    if (!audioFile) {
-      return NextResponse.json(
-        { error: '업로드된 오디오 파일이 없습니다' },
-        { status: 400, headers: corsHeaders }
-      )
     }
 
     // Firebase Storage에 업로드
@@ -172,6 +220,7 @@ export async function POST(req) {
         { status: 500, headers: corsHeaders }
       );
     }
+    */
   } catch (error) {
     console.error('Error processing audio:', error);
     return NextResponse.json(
