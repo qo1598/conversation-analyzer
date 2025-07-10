@@ -350,9 +350,8 @@ async function analyzeOverallConversation(model, conversationText) {
 
 1. 의사소통 명확성: 화자들이 얼마나 명확하게 의사를 전달했는지
 2. 적극적 경청: 화자들이 서로의 의견을 경청하고 반응했는지  
-3. 회의 효율성: 대화가 효율적으로 진행되었는지
+3. 대화 효율성: 대화가 효율적으로 진행되었는지
 4. 문제 해결 능력: 문제 제기와 해결책 제시가 적절했는지
-5. 협력도: 화자들이 협력적으로 대화했는지
 
 각 기준별로 0.0에서 1.0 사이의 점수와 짧은 피드백을 제공해주세요.
 마지막으로 전체적인 대화 평가를 요약해주세요.
@@ -400,7 +399,6 @@ async function analyzeSpeakerIndividually(model, speakerText, speakerName) {
 2. 논리성: 발언의 논리적 구조와 일관성
 3. 적극성: 대화에 얼마나 적극적으로 참여하는지
 4. 전문성: 주제에 대한 이해도와 전문적 지식
-5. 감정 조절: 감정적으로 안정된 대화를 하는지
 
 각 기준별로 0.0에서 1.0 사이의 점수와 짧은 피드백을 제공해주세요.
 마지막으로 이 화자의 커뮤니케이션 특성을 요약해주세요.
@@ -448,9 +446,7 @@ async function analyzeInteraction(model, conversationText, speakerIds) {
 
 1. 상호작용 빈도: 화자들이 얼마나 자주 서로 반응하고 대화하는지
 2. 균형도: 발화량이 화자들 간에 균형있게 분배되었는지
-3. 상호 존중: 서로의 의견을 존중하고 예의있게 대화하는지
-4. 협력성: 공동의 목표를 위해 협력하는지
-5. 갈등 해결: 의견 충돌이 있을 때 건설적으로 해결하는지
+3. 협력성: 공동의 목표를 위해 협력하는지
 
 각 기준별로 0.0에서 1.0 사이의 점수와 피드백을 제공해주세요.
 
@@ -495,9 +491,8 @@ function getDefaultOverallAnalysis() {
     criteria: [
       { name: "의사소통 명확성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
       { name: "적극적 경청", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
-      { name: "회의 효율성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
+      { name: "대화 효율성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
       { name: "문제 해결 능력", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
-      { name: "협력도", score: 0.7, feedback: "분석 중 오류가 발생했습니다." }
     ],
     summary: "API 오류로 인해 분석을 완료할 수 없었습니다."
   };
@@ -518,7 +513,6 @@ function getDefaultSpeakerAnalysis(speakerName) {
       { name: "논리성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
       { name: "적극성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
       { name: "전문성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
-      { name: "감정 조절", score: 0.7, feedback: "분석 중 오류가 발생했습니다." }
     ],
     summary: `${speakerName}의 분석 중 오류가 발생했습니다.`,
     strengths: ["분석 불가"],
@@ -531,9 +525,7 @@ function getDefaultInteractionAnalysis() {
     criteria: [
       { name: "상호작용 빈도", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
       { name: "균형도", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
-      { name: "상호 존중", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
       { name: "협력성", score: 0.7, feedback: "분석 중 오류가 발생했습니다." },
-      { name: "갈등 해결", score: 0.7, feedback: "분석 중 오류가 발생했습니다." }
     ],
     summary: "상호작용 분석 중 오류가 발생했습니다.",
     recommendations: ["분석 불가"]
