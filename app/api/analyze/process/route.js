@@ -69,66 +69,35 @@ async function processSpeechWithClova(audioUrl) {
   try {
     console.log('CLOVA Speech API 트랜스크립션 시작...');
     
-    // API 키 확인
-    if (!CLOVA_API_KEY) {
-      throw new Error('CLOVA API 키가 설정되지 않았습니다.');
+    if (!CLOVA_API_KEY) throw new Error('CLOVA API 키가 설정되지 않았습니다.');
+    
+    let processUrl = audioUrl;
+    if (!processUrl.includes('alt=media')) {
+      processUrl = `${processUrl}${processUrl.includes('?') ? '&' : '?'}alt=media`;
     }
-    
-    console.log('CLOVA API 키 확인 완료, API 호출 시작...');
-    console.log('원본 URL:', audioUrl);
-    
-    // 오디오 URL이 공개적으로 접근 가능하도록 보장
-    if (!audioUrl.includes('alt=media')) {
-      if (audioUrl.includes('?')) {
-        audioUrl = `${audioUrl}&alt=media`;
-      } else {
-        audioUrl = `${audioUrl}?alt=media`;
-      }
+
+    console.log('처리용 URL:', processUrl);
+
+    // URL을 직접 전송하는 방식 먼저 시도 (타임아웃 30초)
+    const urlResult = await processClovaBySendingUrl(processUrl);
+    if (urlResult.success) {
+      console.log('URL 전송 방식 성공');
+      return urlResult.data;
     }
-    
-    // URL 엔코딩 확인
-    if (audioUrl.includes(' ')) {
-      audioUrl = audioUrl.replace(/ /g, '%20');
-    }
-    
-    console.log('처리용 URL:', audioUrl);
-    
-    // URL 유효성 확인
-    try {
-      const headResponse = await axios.head(audioUrl, { timeout: 5000 });
-      console.log('URL 유효성 확인:', headResponse.status, headResponse.headers['content-type']);
-    } catch (headError) {
-      console.warn('URL 유효성 확인 실패:', headError.message);
-      // 실패해도 계속 진행
-    }
-    
-    try {
-      // URL로 직접 처리하는 방식 시도
-      const urlResult = await processClovaBySendingUrl(audioUrl);
-      if (urlResult.success) {
-        return urlResult.data;
-      }
       
-      console.log('URL 방식 실패, 파일 다운로드 후 처리 시도...');
-      
-      // 파일 다운로드 방식 시도
-      const uploadResult = await processClovaByDownloadAndUpload(audioUrl);
-      if (uploadResult.success) {
-        return uploadResult.data;
-      }
-      
-      // 두 방식 모두 실패한 경우
-      throw new Error('음성 파일 처리에 실패했습니다.');
-      
-    } catch (error) {
-      console.error('CLOVA 처리 중 오류:', error);
-      throw error;
+    console.log('URL 방식 실패, 파일 다운로드 후 처리 시도...');
+    
+    // 파일 다운로드 방식 시도
+    const uploadResult = await processClovaByDownloadAndUpload(processUrl);
+    if (uploadResult.success) {
+      console.log('다운로드 및 업로드 방식 성공');
+      return uploadResult.data;
     }
+    
+    throw new Error('음성 파일 처리에 실패했습니다. 두 방식 모두 실패.');
+
   } catch (error) {
-    console.error('CLOVA Speech API 오류:', error);
-    console.error('오류 상세 내용:', error.response?.data || '상세 정보 없음');
-    
-    // 오류 발생 시 기본 결과 생성하여 반환
+    console.error('CLOVA Speech API 오류:', error.message);
     return {
       transcript: [{ speaker: '0', text: `음성 인식 중 오류가 발생했습니다: ${error.message}`, start: 0, end: 1 }],
       speakers: { '0': { id: '0', name: '화자 1', color: '#3B82F6' } }
@@ -139,53 +108,30 @@ async function processSpeechWithClova(audioUrl) {
 // URL을 CLOVA API로 직접 전송하는 방식
 async function processClovaBySendingUrl(audioUrl) {
   try {
-    // CLOVA Speech API 요청 옵션
-    const requestOptions = {
-      language: 'ko-KR',            // 한국어
-      completion: 'sync',           // 동기 처리
-      url: audioUrl,                // 오디오 파일 URL
-      diarization: {
-        enable: true                // 화자 분리 활성화
+    const response = await axios.post(
+      `${CLOVA_INVOKE_URL}/recognizer/url`,
+      {
+        language: 'ko-KR',
+        completion: 'sync',
+        url: audioUrl,
+        diarization: { enable: true },
+        wordAlignment: true,
+        fullText: true,
+        requestId: crypto.lib.WordArray.random(16).toString()
       },
-      wordAlignment: true,          // 인식 결과의 음성과 텍스트 정렬 출력
-      fullText: true,               // 전체 인식 결과 텍스트 출력
-      requestId: crypto.lib.WordArray.random(16).toString()  // 고유 요청 ID 생성
-    };
+      {
+        headers: { 'Content-Type': 'application/json', 'X-CLOVASPEECH-API-KEY': CLOVA_API_KEY },
+        timeout: 30000 // 타임아웃 30초로 증가
+      }
+    );
     
-    // API 요청 URL
-    const apiUrl = `${CLOVA_INVOKE_URL}/recognizer/url`;
-    
-    // API 호출 (타임아웃 15초 설정)
-    const response = await axios.post(apiUrl, requestOptions, {
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CLOVASPEECH-API-KEY': CLOVA_API_KEY
-      },
-      timeout: 15000
-    });
-    
-    console.log('CLOVA API 응답 상태:', response.status);
-    
-    // 응답 확인
-    if (response.status !== 200 || !response.data) {
-      throw new Error(`CLOVA API 요청 오류: ${response.status}`);
+    if (response.status !== 200 || response.data.result === 'FAILED') {
+      throw new Error(`CLOVA API 요청 오류(URL): ${response.data.message || response.status}`);
     }
     
-    console.log('CLOVA API 응답 구조:', JSON.stringify(response.data).slice(0, 300) + '...');
-    
-    // API 응답이 실패 상태인 경우
-    if (response.data.result === 'FAILED') {
-      console.error('CLOVA API 처리 실패:', response.data.message);
-      return { success: false, error: response.data.message };
-    }
-    
-    // 결과 생성 및 반환
-    return { 
-      success: true, 
-      data: processTranscriptionResult(response.data) 
-    };
+    return { success: true, data: processTranscriptionResult(response.data) };
   } catch (error) {
-    console.error('URL 방식 CLOVA API 오류:', error);
+    console.warn('URL 방식 CLOVA API 오류:', error.message);
     return { success: false, error: error.message };
   }
 }
@@ -193,111 +139,39 @@ async function processClovaBySendingUrl(audioUrl) {
 // 파일을 다운로드하여 직접 업로드하는 방식
 async function processClovaByDownloadAndUpload(audioUrl) {
   try {
-    console.log('파일 다운로드 시도 중...');
+    const response = await axios.get(audioUrl, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+    });
     
-    // 파일 다운로드 - 타임아웃 및 재시도 처리
-    let response;
-    try {
-      response = await axios.get(audioUrl, {
-        responseType: 'arraybuffer',
-        timeout: 30000,
-        maxContentLength: 100 * 1024 * 1024, // 100MB
-        headers: {
-          'Accept': 'audio/*',
-          'Cache-Control': 'no-cache'
-        }
-      });
-    } catch (downloadError) {
-      console.error('첫 번째 다운로드 시도 실패:', downloadError.message);
-      
-      // 재시도 - URL 파라미터 변경
-      try {
-        const retryUrl = audioUrl.includes('?') ? 
-          `${audioUrl}&t=${Date.now()}` : 
-          `${audioUrl}?t=${Date.now()}`;
-        
-        console.log('다운로드 재시도:', retryUrl);
-        
-        response = await axios.get(retryUrl, {
-          responseType: 'arraybuffer',
-          timeout: 30000,
-          maxContentLength: 100 * 1024 * 1024
-        });
-      } catch (retryError) {
-        console.error('재시도 다운로드 실패:', retryError.message);
-        throw retryError;
-      }
-    }
-    
-    // 다운로드 성공 확인
-    if (!response.data || response.data.byteLength === 0) {
-      throw new Error('다운로드된 파일이 비어 있습니다');
-    }
-    
-    console.log('파일 다운로드 완료, 크기:', response.data.byteLength, 
-                '타입:', response.headers['content-type'] || 'audio/mpeg');
-    
-    // 파일 타입 확인
-    const contentType = response.headers['content-type'] || 'audio/mpeg';
-    
-    // CLOVA Speech API 요청 옵션
+    if (!response.data || response.data.byteLength === 0) throw new Error('다운로드된 파일이 비어 있습니다');
+
     const formData = new FormData();
-    
-    // 적절한 파일 확장자 결정
-    let fileExt = '.mp3';
-    if (contentType.includes('wav')) fileExt = '.wav';
-    else if (contentType.includes('m4a')) fileExt = '.m4a';
-    else if (contentType.includes('ogg')) fileExt = '.ogg';
-    
-    // Blob 생성
+    const contentType = response.headers['content-type'] || 'audio/mpeg';
+    const fileExt = contentType.includes('wav') ? '.wav' : '.mp3';
     const audioBlob = new Blob([response.data], { type: contentType });
     formData.append('media', audioBlob, `audio${fileExt}`);
     
-    console.log(`CLOVA로 업로드 준비: ${audioBlob.size} 바이트, 타입: ${contentType}, 확장자: ${fileExt}`);
+    const clovaResponse = await axios.post(
+      `${CLOVA_INVOKE_URL}/recognizer/upload`,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data', 'X-CLOVASPEECH-API-KEY': CLOVA_API_KEY },
+        params: {
+          language: 'ko-KR', completion: 'sync', diarization: { enable: true },
+          wordAlignment: true, fullText: true
+        },
+        timeout: 60000 
+      }
+    );
     
-    const config = {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        'X-CLOVASPEECH-API-KEY': CLOVA_API_KEY
-      },
-      params: {
-        language: 'ko-KR',
-        completion: 'sync',
-        diarization: { enable: true },
-        wordAlignment: true,
-        fullText: true
-      },
-      timeout: 60000 // 타임아웃 증가
-    };
-    
-    // API 요청 URL (파일 업로드용)
-    const apiUrl = `${CLOVA_INVOKE_URL}/recognizer/upload`;
-    
-    // API 호출
-    const clovaResponse = await axios.post(apiUrl, formData, config);
-    
-    console.log('CLOVA API(업로드) 응답 상태:', clovaResponse.status);
-    
-    // 응답 확인
-    if (clovaResponse.status !== 200 || !clovaResponse.data) {
-      throw new Error(`CLOVA API(업로드) 요청 오류: ${clovaResponse.status}`);
+    if (clovaResponse.status !== 200 || clovaResponse.data.result === 'FAILED') {
+      throw new Error(`CLOVA API 요청 오류(Upload): ${clovaResponse.data.message || clovaResponse.status}`);
     }
     
-    console.log('CLOVA API(업로드) 응답 구조:', JSON.stringify(clovaResponse.data).slice(0, 300) + '...');
-    
-    // API 응답이 실패 상태인 경우
-    if (clovaResponse.data.result === 'FAILED') {
-      console.error('CLOVA API(업로드) 처리 실패:', clovaResponse.data.message);
-      return { success: false, error: clovaResponse.data.message };
-    }
-    
-    // 결과 생성 및 반환
-    return { 
-      success: true, 
-      data: processTranscriptionResult(clovaResponse.data) 
-    };
+    return { success: true, data: processTranscriptionResult(clovaResponse.data) };
   } catch (error) {
-    console.error('업로드 방식 CLOVA API 오류:', error);
+    console.error('업로드 방식 CLOVA API 오류:', error.message);
     return { success: false, error: error.message };
   }
 }
@@ -389,7 +263,6 @@ function processTranscriptionResult(apiResponse) {
 // Gemini API를 사용한 대화 분석
 async function analyzeConversation(transcript) {
   try {
-    // API 키 확인
     const apiKey = GEMINI_API_KEY;
     if (!apiKey) {
       console.warn('Gemini API 키가 설정되지 않았습니다. 분석을 건너뜁니다.');
@@ -463,18 +336,13 @@ ${conversationText}
 
       console.log('Gemini API 호출 중...');
       
-      // 타임아웃 설정으로 API 호출 보호
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Gemini API 호출 시간 초과')), 10000)
-      );
-      
-      const apiPromise = model.generateContent(prompt);
-      
-      // Promise.race로 타임아웃 구현
-      const result = await Promise.race([apiPromise, timeoutPromise]);
+      // API 호출 (타임아웃 25초 설정)
+      const result = await model.generateContent(prompt);
+
+      // 타임아웃 로직 제거, generateContent가 충분한 시간을 가짐
+      // Vercel의 maxDuration이 전체 실행 시간을 제어
+
       const responseText = result.response.text();
-      
-      // JSON 추출
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         return JSON.parse(jsonMatch[0]);
