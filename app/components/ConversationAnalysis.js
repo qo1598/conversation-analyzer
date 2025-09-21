@@ -9,9 +9,19 @@ export default function ConversationAnalysis({ data }) {
   const [analysisView, setAnalysisView] = useState('overall')
   const [selectedAnalysisSpeaker, setSelectedAnalysisSpeaker] = useState('')
 
-  if (!data) return null;
+  console.log('=== ConversationAnalysis 컴포넌트 데이터 ===')
+  console.log('data:', data)
+  
+  if (!data) {
+    console.log('데이터가 없습니다')
+    return null;
+  }
 
   const { transcript, speakers, analysis } = data
+  
+  console.log('transcript:', transcript)
+  console.log('speakers:', speakers)
+  console.log('analysis:', analysis)
   
   const filteredTranscript = selectedSpeaker === 'all' 
     ? transcript 
@@ -54,7 +64,48 @@ export default function ConversationAnalysis({ data }) {
 
       {activeTab === 'transcript' && (
         <div>
-          {/* ... (이 부분은 기존 코드와 동일하게 유지) ... */}
+          {/* 화자 필터 */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">화자 필터</label>
+            <select
+              value={selectedSpeaker}
+              onChange={(e) => setSelectedSpeaker(e.target.value)}
+              className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+            >
+              <option value="all">전체 화자</option>
+              {speakers && Object.entries(speakers).map(([id, info]) => (
+                <option key={id} value={id}>{info.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 대화 내용 */}
+          <div className="space-y-4">
+            {transcript && transcript.length > 0 ? (
+              filteredTranscript.map((item, index) => (
+                <div key={index} className="border-l-4 border-blue-200 pl-4 py-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-sm text-blue-600">
+                      {speakers && speakers[item.speaker] ? speakers[item.speaker].name : `화자 ${item.speaker}`}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {item.start ? `${Math.floor(item.start / 60)}:${String(Math.floor(item.start % 60)).padStart(2, '0')}` : ''}
+                      {item.end ? ` - ${Math.floor(item.end / 60)}:${String(Math.floor(item.end % 60)).padStart(2, '0')}` : ''}
+                    </span>
+                  </div>
+                  <p className="text-gray-800 leading-relaxed">{item.text}</p>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <div className="text-4xl mb-4">📝</div>
+                <p className="text-gray-500">대화 내용이 없습니다</p>
+                <p className="text-sm text-gray-400 mt-2">
+                  STT 처리가 완료되지 않았거나 대화 내용이 비어있습니다.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
