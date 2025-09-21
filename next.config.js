@@ -7,13 +7,8 @@ const nextConfig = {
     DAGLO_API_KEY: process.env.DAGLO_API_KEY
   },
   
-  // Vercel에서 큰 파일 업로드를 위한 설정
-  experimental: {
-    serverComponentsExternalPackages: ['@google-cloud/speech']
-  },
-  
   // Next.js 15.3.2에서 업데이트된 설정
-  serverExternalPackages: ['formidable', 'firebase'],
+  serverExternalPackages: ['@google-cloud/speech', 'formidable', 'firebase'],
   
   // 파일 추적 제외 설정 (루트 레벨로 이동)
   outputFileTracingExcludes: {
