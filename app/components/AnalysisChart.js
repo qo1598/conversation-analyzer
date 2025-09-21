@@ -51,4 +51,4 @@ export default function AnalysisChart({ data, barColor }) {
       </ResponsiveContainer>
     </div>
   );
-} 
+}
