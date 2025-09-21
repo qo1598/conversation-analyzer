@@ -5,7 +5,7 @@ import axios from 'axios'
 
 // Supabase 설정
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://hgxbtjxxqjmgemtoyauh.supabase.co'
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_SERVICE_KEY_HERE'
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhneGJ0anh4cWptZ2VtdG95YXVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3NjcxMTMsImV4cCI6MjA1MjM0MzExM30.3cJBpIzJqBBrfzxQNKGJJQWjPKzFbGRiKuWKfVEqDqk'
 
 // Service role key를 사용한 Supabase 클라이언트
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
