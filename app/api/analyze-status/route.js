@@ -288,7 +288,7 @@ async function analyzeConversation(transcript, speakers) {
     console.log('Gemini API 종합 분석 시작...');
     
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
     // 전체 대화 텍스트 생성 (처음 30개 세그먼트만 사용)
     const limitedTranscript = transcript.slice(0, 30);

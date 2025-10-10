@@ -5,16 +5,6 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
 import crypto from 'crypto-js';
 
-// Firebase 설정
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCMfOKrEe89G6jnlW2A-TwDeKe8FS_K1uY",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "conversation-analyzer-67e97.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "conversation-analyzer-67e97",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "conversation-analyzer-67e97.firebasestorage.app",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "919686543413",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:919686543413:web:2efd0b1ec412a53906197c",
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-31J910Q1ZF"
-};
 
 // API 키 설정
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "AIzaSyBP4odtkyJ9IA9f9ltND1SsDiMmVLyqK30";
@@ -305,7 +295,7 @@ async function analyzeConversation(transcript) {
       // Gemini API 초기화
       const genAI = new GoogleGenerativeAI(apiKey);
       // 올바른 모델명 사용
-      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
       // 분석용 프롬프트 생성
       const conversationText = transcript

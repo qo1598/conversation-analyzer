@@ -299,7 +299,7 @@ async function analyzeConversation(transcript) {
       // Gemini API 초기화
       const genAI = new GoogleGenerativeAI(apiKey);
       // 올바른 모델명 사용
-      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
       // 분석용 프롬프트 생성
       const conversationText = transcript
