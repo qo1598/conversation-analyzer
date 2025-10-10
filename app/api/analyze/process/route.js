@@ -17,7 +17,7 @@ const firebaseConfig = {
 };
 
 // API 키 설정
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "AIzaSyBr3C6s-vWZR9LfI_Kc72jLQsI3bemd-Fk";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "AIzaSyBP4odtkyJ9IA9f9ltND1SsDiMmVLyqK30";
 const CLOVA_API_KEY = process.env.CLOVA_API_KEY || "6c966a5202884166a61d60ffe94e3fe3";
 const CLOVA_INVOKE_URL = process.env.CLOVA_INVOKE_URL || "https://clovaspeech-gw.ncloud.com/external/v1/11426/ecd178705e5c9daf118851dee0f7d32ed78312436cca9be9f61aef879f729654";
 
@@ -299,7 +299,7 @@ async function analyzeConversation(transcript) {
       // Gemini API 초기화
       const genAI = new GoogleGenerativeAI(apiKey);
       // 올바른 모델명 사용
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
       // 분석용 프롬프트 생성
       const conversationText = transcript

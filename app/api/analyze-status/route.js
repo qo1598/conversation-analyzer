@@ -18,7 +18,7 @@ const corsHeaders = {
 };
 
 // API 키 환경 변수에서 가져오기
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "AIzaSyBr3C6s-vWZR9LfI_Kc72jLQsI3bemd-Fk";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "AIzaSyBP4odtkyJ9IA9f9ltND1SsDiMmVLyqK30";
 const DAGLO_API_KEY = process.env.DAGLO_API_KEY || "LL9h2BxPTGGvjnj5zq4kDmo7";
 
 // OPTIONS 메서드 처리
@@ -288,7 +288,7 @@ async function analyzeConversation(transcript, speakers) {
     console.log('Gemini API 종합 분석 시작...');
     
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
     // 전체 대화 텍스트 생성 (처음 30개 세그먼트만 사용)
     const limitedTranscript = transcript.slice(0, 30);
