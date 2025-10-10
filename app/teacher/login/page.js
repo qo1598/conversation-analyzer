@@ -230,12 +230,6 @@ export default function TeacherLogin() {
               {loading ? '처리 중...' : (isLogin ? '로그인' : '회원가입')}
             </button>
           </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              실제 Supabase 계정으로 로그인됩니다
-            </p>
-          </div>
         </div>
       </div>
     </div>
