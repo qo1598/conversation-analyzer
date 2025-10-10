@@ -230,7 +230,6 @@ export default function TeacherLogin() {
               {loading ? '처리 중...' : (isLogin ? '로그인' : '회원가입')}
             </button>
           </form>
-
         </div>
       </div>
     </div>
