@@ -10,6 +10,8 @@ export default function TeacherDashboard() {
   const [sessions, setSessions] = useState([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newSessionName, setNewSessionName] = useState('')
+  const [sessionType, setSessionType] = useState('live') // 'live' or 'archive'
+  const [recordingDate, setRecordingDate] = useState('')
   const [loading, setLoading] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -19,36 +21,18 @@ export default function TeacherDashboard() {
   }, [router])
 
   const checkAuthAndLoadData = async () => {
-    // 로그인 체크
     const { success, data } = await authAPI.getCurrentUser()
     if (!success || !data) {
       router.push('/teacher/login')
       return
     }
-    
     setTeacher(data)
-
-    // 세션 데이터 불러오기
     await loadSessions()
   }
 
   const loadSessions = async () => {
-    console.log('=== 세션 로드 시작 ===')
     const { success, data } = await sessionAPI.getTeacherSessions()
-    console.log('세션 로드 결과:', { success, data })
-    
-    if (success) {
-      console.log('세션 데이터 상세:', data?.map(session => ({
-        id: session.id,
-        name: session.name,
-        code: session.code,
-        recordingsCount: session.recordings?.length || 0,
-        recordings: session.recordings
-      })))
-      setSessions(data || [])
-    } else {
-      console.error('세션 로드 실패')
-    }
+    if (success) setSessions(data || [])
   }
 
   const createSession = async () => {
@@ -59,19 +43,15 @@ export default function TeacherDashboard() {
 
     setLoading(true)
     try {
-      const { success, data, error } = await sessionAPI.createSession(newSessionName)
-      
+      const { success, data, error } = await sessionAPI.createSession(newSessionName, sessionType, recordingDate)
       if (success) {
-        await loadSessions() // 세션 목록 새로고침
+        await loadSessions()
         setNewSessionName('')
         setShowCreateModal(false)
         alert(`세션이 생성되었습니다! 코드: ${data.code}`)
       } else {
         alert(`세션 생성 실패: ${error}`)
       }
-    } catch (error) {
-      console.error('세션 생성 오류:', error)
-      alert('세션 생성 중 오류가 발생했습니다.')
     } finally {
       setLoading(false)
     }
@@ -80,198 +60,149 @@ export default function TeacherDashboard() {
   const deleteSession = async (sessionId) => {
     if (confirm('정말로 이 세션을 삭제하시겠습니까?')) {
       const { success } = await sessionAPI.deleteSession(sessionId)
-      if (success) {
-        await loadSessions() // 세션 목록 새로고침
-      } else {
-        alert('세션 삭제에 실패했습니다.')
-      }
+      if (success) await loadSessions()
     }
   }
 
   const logout = async () => {
     await authAPI.signOut()
-    if (mounted) {
-      router.push('/')
-    }
+    if (mounted) router.push('/')
   }
 
   const navigateToSession = (sessionId) => {
-    if (mounted) {
-      router.push(`/teacher/session/${sessionId}`)
-    }
+    if (mounted) router.push(`/teacher/session/${sessionId}`)
   }
 
-  if (!mounted || !teacher) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">로딩 중...</p>
-        </div>
-      </div>
-    )
-  }
+  if (!mounted || !teacher) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 헤더 */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">교사 대시보드</h1>
-            </div>
+    <div className="min-h-screen bg-gray-50/50">
+      {/* 상단 헤더 (배경 그라데이션) */}
+      <div className="bg-gradient-to-r from-indigo-600 to-violet-600 pb-32">
+        <header className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              <span className="text-3xl">🎙️</span> 대화 분석 시스템
+            </h1>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">안녕하세요, {teacher.name}님</span>
+              <span className="text-indigo-100 text-sm font-medium bg-indigo-500/30 px-3 py-1 rounded-full backdrop-blur-sm">
+                {teacher.name} 선생님
+              </span>
               <button
                 onClick={logout}
-                className="text-sm text-red-600 hover:text-red-800"
+                className="text-sm text-indigo-100 hover:text-white transition-colors font-medium"
               >
                 로그아웃
               </button>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
+      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* 통계 카드 */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-24">
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-6 h-6 bg-blue-500 rounded-md flex items-center justify-center">
-                  📊
-                </div>
+          {[
+            { label: '전체 세션', value: sessions.length, icon: '📊', color: 'bg-blue-500' },
+            { label: '활성 세션', value: sessions.filter(s => s.status === 'active').length, icon: '✅', color: 'bg-green-500' },
+            { label: '누적 분석', value: sessions.reduce((t, s) => t + (s.recordings?.length || 0), 0), icon: '📈', color: 'bg-purple-500' }
+          ].map((stat, i) => (
+            <div key={i} className="bg-white rounded-2xl shadow-lg shadow-indigo-100 border border-white p-6 flex items-center transform transition-transform hover:-translate-y-1 duration-300">
+              <div className={`w-12 h-12 ${stat.color} rounded-xl flex items-center justify-center text-xl text-white shadow-md`}>
+                {stat.icon}
               </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">전체 세션</dt>
-                  <dd className="text-lg font-medium text-gray-900">{sessions.length}</dd>
-                </dl>
+              <div className="ml-5">
+                <p className="text-sm font-medium text-gray-500">{stat.label}</p>
+                <p className="text-2xl font-bold text-gray-800">{stat.value}</p>
               </div>
             </div>
-          </div>
+          ))}
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-6 h-6 bg-green-500 rounded-md flex items-center justify-center">
-                  ✅
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">활성 세션</dt>
-                  <dd className="text-lg font-medium text-gray-900">
-                    {sessions.filter(s => s.status === 'active').length}
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-6 h-6 bg-purple-500 rounded-md flex items-center justify-center">
-                  🎤
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">총 녹음</dt>
-                  <dd className="text-lg font-medium text-gray-900">
-                    {sessions.reduce((total, session) => total + (session.recordings?.length || 0), 0)}
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* 파일 업로드 분석 섹션 */}
-        <div className="bg-white shadow rounded-lg mb-8">
-          <div className="px-4 py-5 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-2">파일 업로드 분석</h3>
-                <p className="text-sm text-gray-600">
-                  기존에 녹음된 파일을 업로드하여 AI 분석을 받을 수 있습니다. 
-                  세션과 별개로 개별 파일을 분석하고 싶을 때 사용하세요.
-                </p>
-              </div>
-              <div className="ml-6">
+        {/* 메인 컨텐츠 영역 */}
+        <div className="bg-white rounded-3xl shadow-xl shadow-indigo-100/50 border border-gray-100 overflow-hidden min-h-[500px]">
+          <div className="p-8 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">나의 수업 세션</h2>
+              <p className="text-gray-500 text-sm mt-1">
+                생성한 수업 세션을 관리하고 분석 결과를 확인하세요.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all flex items-center gap-2"
+            >
+              <span>➕</span> 새 세션 만들기
+            </button>
+          </div>
+
+          <div className="p-8">
+            {sessions.length === 0 ? (
+              <div className="text-center py-20 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-200">
+                <div className="text-6xl mb-4 opacity-20">📝</div>
+                <h3 className="text-lg font-medium text-gray-900">아직 세션이 없습니다</h3>
+                <p className="text-gray-500 mt-2 mb-6">새로운 수업 세션을 만들어 분석을 시작해보세요.</p>
                 <button
-                  onClick={() => {
-                    if (mounted) {
-                      router.push('/legacy')
-                    }
-                  }}
-                  className="inline-flex items-center px-4 py-2 border border-blue-300 text-sm font-medium rounded-md text-blue-600 hover:text-blue-800 hover:border-blue-400 bg-blue-50 hover:bg-blue-100 transition-colors"
+                  onClick={() => setShowCreateModal(true)}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
                 >
-                  📁 파일 업로드
+                  세션 생성하기
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 세션 목록 */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">내 세션</h3>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-              >
-                ➕ 새 세션 만들기
-              </button>
-            </div>
-
-            {sessions.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="mx-auto h-12 w-12 text-gray-400 text-4xl">📝</div>
-                <h3 className="mt-2 text-sm font-medium text-gray-900">세션이 없습니다</h3>
-                <p className="mt-1 text-sm text-gray-500">새 세션을 만들어 시작해보세요.</p>
-              </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {sessions.map((session) => (
-                  <div key={session.id} className="border border-gray-200 rounded-lg p-6 hover:bg-gray-50">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h4 className="text-lg font-medium text-gray-900">{session.name}</h4>
-                        <div className="mt-2 flex items-center text-sm text-gray-500">
-                          <span className="mr-4">
-                            코드: <span className="font-mono font-bold text-lg text-blue-600">{session.code}</span>
-                          </span>
-                          <span className="mr-4">
-                            생성일: {new Date(session.created_at).toLocaleDateString()}
-                          </span>
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            session.status === 'active' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {session.status === 'active' ? '활성' : '비활성'}
-                          </span>
+                  <div key={session.id} className="group bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-xl hover:shadow-indigo-100/50 hover:border-indigo-200 transition-all cursor-pointer relative" onClick={() => navigateToSession(session.id)}>
+                    <div className="flex justify-between items-start mb-4">
+                      {session.type === 'archive' ? (
+                        <div className="px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">
+                          📂 기존 파일 분석
                         </div>
+                      ) : (
+                        <div className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">
+                          🎤 실시간 수업
+                        </div>
+                      )}
+                      <span className="text-xs text-gray-400 font-mono">
+                        {new Date(session.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    <h3 className="text-lg font-bold text-gray-800 mb-2 group-hover:text-indigo-600 transition-colors line-clamp-1">
+                      {session.name}
+                    </h3>
+
+                    {session.type === 'archive' ? (
+                      <div className="bg-gray-50 rounded-lg p-3 mb-6 flex items-center justify-between group-hover:bg-purple-50/50 transition-colors">
+                        <span className="text-xs text-gray-500">녹음 일자</span>
+                        <span className="text-sm font-medium text-gray-700">
+                          {session.recording_date ? new Date(session.recording_date).toLocaleDateString() : '-'}
+                        </span>
                       </div>
-                      
-                      <div className="flex items-center space-x-2">
+                    ) : (
+                      <div className="bg-gray-50 rounded-lg p-3 mb-6 flex items-center justify-between group-hover:bg-indigo-50/50 transition-colors">
+                        <span className="text-xs text-gray-500">입장 코드</span>
+                        <span className="text-lg font-mono font-bold text-indigo-600 tracking-wider btn-copy">
+                          {session.code}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between border-t border-gray-100 pt-4">
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <span>{session.type === 'archive' ? '💾' : '🎤'}</span> 녹음 {session.recordings?.length || 0}개
+                      </div>
+                      <div className="flex gap-2">
                         <button
-                          onClick={() => navigateToSession(session.id)}
-                          className="px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                          onClick={(e) => { e.stopPropagation(); deleteSession(session.id); }}
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="삭제"
                         >
-                          관리
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         </button>
-                        <button
-                          onClick={() => deleteSession(session.id)}
-                          className="px-3 py-2 text-sm text-red-600 hover:text-red-800"
-                        >
-                          삭제
+                        <button className="text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                          입장하기 →
                         </button>
                       </div>
                     </div>
@@ -281,15 +212,37 @@ export default function TeacherDashboard() {
             )}
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* 세션 생성 모달 */}
+      {/* 모달 */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">새 세션 만들기</h3>
-              <div className="mb-4">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">새 세션 만들기</h3>
+            <div className="mb-6 space-y-4">
+              {/* 세션 유형 선택 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">세션 유형</label>
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setSessionType('live')}
+                    className={`flex-1 py-3 px-4 rounded-xl border transition-all flex items-center justify-center gap-2 ${sessionType === 'live' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-500' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                  >
+                    <span>🎤</span>
+                    <span className="font-medium">실시간 수업</span>
+                  </button>
+                  <button
+                    onClick={() => setSessionType('archive')}
+                    className={`flex-1 py-3 px-4 rounded-xl border transition-all flex items-center justify-center gap-2 ${sessionType === 'archive' ? 'border-purple-500 bg-purple-50 text-purple-700 ring-1 ring-purple-500' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                  >
+                    <span>📂</span>
+                    <span className="font-medium">기존 파일 분석</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 세션 이름 입력 */}
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   세션 이름
                 </label>
@@ -297,30 +250,45 @@ export default function TeacherDashboard() {
                   type="text"
                   value={newSessionName}
                   onChange={(e) => setNewSessionName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="예: 1학년 1반 토론 활동"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all placeholder-gray-300"
+                  placeholder="예: 2024 국어 토론 수업"
                   autoFocus
                 />
               </div>
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={createSession}
-                  disabled={loading}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
-                >
-                  {loading ? '생성 중...' : '생성'}
-                </button>
-              </div>
+
+              {/* 녹음 날짜 선택 (아카이브 모드일 때만) */}
+              {sessionType === 'archive' && (
+                <div className="animate-in fade-in slide-in-from-top-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    녹음 날짜
+                  </label>
+                  <input
+                    type="date"
+                    value={recordingDate}
+                    onChange={(e) => setRecordingDate(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-5 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={createSession}
+                disabled={loading}
+                className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+              >
+                {loading ? '생성 중...' : '세션 생성'}
+              </button>
             </div>
           </div>
         </div>
       )}
     </div>
   )
-} 
+}

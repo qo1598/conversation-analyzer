@@ -1,4 +1,4 @@
-import './styles/globals.css'
+import './globals.css'
 
 export const metadata = {
   title: '대화 분석 시스템',

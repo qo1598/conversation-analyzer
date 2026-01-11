@@ -7,151 +7,84 @@ import { authAPI } from '../../../lib/supabase'
 export default function TeacherLogin() {
   const router = useRouter()
   const [isLogin, setIsLogin] = useState(true)
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: ''
-  })
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('') // 초기값 빈 문자열
+  const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
-    // 이미 로그인되어 있는지 확인
-    checkExistingAuth()
   }, [])
-
-  const checkExistingAuth = async () => {
-    const { success, data } = await authAPI.getCurrentUser()
-    if (success && data) {
-      router.push('/teacher/dashboard')
-    }
-  }
-
-  const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    })
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!mounted) return
-    
     setLoading(true)
-    setError('')
 
     try {
-      if (!isLogin) {
-        // 회원가입 검증
-        if (formData.password !== formData.confirmPassword) {
-          setError('비밀번호가 일치하지 않습니다.')
-          setLoading(false)
-          return
-        }
-        if (formData.password.length < 6) {
-          setError('비밀번호는 6자리 이상이어야 합니다.')
-          setLoading(false)
-          return
-        }
-
-        // Supabase 회원가입
-        const { success, error: signUpError } = await authAPI.signUp(
-          formData.email, 
-          formData.password, 
-          formData.name
-        )
-
+      if (isLogin) {
+        // 로그인
+        const { success, error } = await authAPI.signIn(email, password)
         if (success) {
-          alert('회원가입이 완료되었습니다. 이메일을 확인해주세요.')
-          setIsLogin(true) // 로그인 탭으로 전환
-        } else {
-          setError(signUpError || '회원가입 중 오류가 발생했습니다.')
-        }
-      } else {
-        // Supabase 로그인
-        const { success, data, error: signInError } = await authAPI.signIn(
-          formData.email, 
-          formData.password
-        )
-
-        if (success && data.user) {
           router.push('/teacher/dashboard')
         } else {
-          setError(signInError || '이메일 또는 비밀번호가 올바르지 않습니다.')
+          alert('로그인 실패: ' + error)
+        }
+      } else {
+        // 회원가입
+        const { success, error, needsEmailConfirmation } = await authAPI.signUp(email, password, name)
+        if (success) {
+          if (needsEmailConfirmation) {
+            alert('회원가입이 완료되었습니다. 이메일을 확인하여 인증해주세요.')
+          } else {
+            alert('회원가입이 완료되었습니다. 로그인해주세요.')
+            setIsLogin(true)
+          }
+        } else {
+          alert('회원가입 실패: ' + error)
         }
       }
-    } catch (err) {
-      console.error('인증 오류:', err)
-      setError('로그인 중 오류가 발생했습니다.')
+    } catch (error) {
+      console.error('인증 오류:', error)
+      alert('오류가 발생했습니다.')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleGoHome = () => {
-    if (mounted) {
-      router.push('/')
-    }
-  }
-
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">로딩 중...</p>
-        </div>
-      </div>
-    )
-  }
+  // 렌더링 전에는 아무것도 보여주지 않음 (Hydration 오류 방지)
+  if (!mounted) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4">
-      <div className="max-w-md w-full">
-        {/* 로고 및 제목 */}
-        <div className="text-center mb-8">
-          <button
-            onClick={handleGoHome}
-            className="text-sm text-gray-600 hover:text-gray-800 mb-4 flex items-center mx-auto"
-          >
-            ← 홈으로 돌아가기
-          </button>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">교사 계정</h1>
-          <p className="text-gray-600">
-            {isLogin ? '로그인하여 세션을 관리하세요' : '새 계정을 만들어보세요'}
+    <div className="min-h-screen flex bg-white">
+      {/* 왼쪽 브랜딩 섹션 (모바일 숨김) */}
+      <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-indigo-600 to-violet-700 items-center justify-center relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-indigo-400 opacity-20 rounded-full blur-3xl -ml-20 -mb-20"></div>
+
+        <div className="text-center text-white p-12 relative z-10">
+          <div className="text-6xl mb-6">🎙️</div>
+          <h2 className="text-4xl font-bold mb-4">대화 분석 시스템</h2>
+          <p className="text-indigo-100 text-lg max-w-md mx-auto leading-relaxed">
+            AI 기반의 정밀한 화자 분리와<br />심층적인 대화 패턴 분석을 경험해보세요.
           </p>
         </div>
+      </div>
 
-        {/* 로그인/회원가입 폼 */}
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <div className="flex mb-6">
-            <button
-              onClick={() => setIsLogin(true)}
-              className={`flex-1 py-2 px-4 text-center font-medium border-b-2 ${
-                isLogin
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              로그인
-            </button>
-            <button
-              onClick={() => setIsLogin(false)}
-              className={`flex-1 py-2 px-4 text-center font-medium border-b-2 ${
-                !isLogin
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              회원가입
-            </button>
+      {/* 오른쪽 폼 섹션 */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 lg:p-12">
+        <div className="w-full max-w-md space-y-8">
+
+          <div className="text-center lg:text-left">
+            <h2 className="text-3xl font-bold text-gray-900 tracking-tight">
+              {isLogin ? '선생님, 환영합니다!' : '계정 만들기'}
+            </h2>
+            <p className="mt-2 text-sm text-gray-500">
+              {isLogin ? '계정에 로그인하여 시작하세요.' : '새로운 분석 여정을 시작해보세요.'}
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
             {!isLogin && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -159,11 +92,10 @@ export default function TeacherLogin() {
                 </label>
                 <input
                   type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  required={!isLogin}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="appearance-none block w-full px-4 py-3 border border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                   placeholder="홍길동"
                 />
               </div>
@@ -171,15 +103,14 @@ export default function TeacherLogin() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                이메일
+                이메일 주소
               </label>
               <input
                 type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="appearance-none block w-full px-4 py-3 border border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 placeholder="teacher@example.com"
               />
             </div>
@@ -190,48 +121,39 @@ export default function TeacherLogin() {
               </label>
               <input
                 type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleInputChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="appearance-none block w-full px-4 py-3 border border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 placeholder="••••••••"
               />
             </div>
 
-            {!isLogin && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  비밀번호 확인
-                </label>
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleInputChange}
-                  required={!isLogin}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="••••••••"
-                />
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded">
-                {error}
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg hover:shadow-indigo-200"
             >
-              {loading ? '처리 중...' : (isLogin ? '로그인' : '회원가입')}
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                isLogin ? '로그인하기' : '회원가입하기'
+              )}
             </button>
           </form>
+
+          <div className="text-center">
+            <button
+              onClick={() => setIsLogin(!isLogin)}
+              className="font-medium text-indigo-600 hover:text-indigo-500 text-sm transition-colors"
+            >
+              {isLogin
+                ? '아직 계정이 없으신가요? 회원가입'
+                : '이미 계정이 있으신가요? 로그인'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
-} 
+}

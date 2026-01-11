@@ -1,54 +1,63 @@
 'use client'
 
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell
+} from 'recharts'
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white p-2 border border-gray-200 rounded-lg shadow-sm">
-        <p className="font-semibold">{`${label}`}</p>
-        <p className="text-sm text-blue-600">{`점수: ${payload[0].value} / 100`}</p>
-      </div>
-    );
-  }
-  return null;
-};
-
-export default function AnalysisChart({ data, barColor }) {
-  if (!data || data.length === 0) {
-    return <p className="text-center text-gray-500">분석 데이터가 없습니다.</p>;
-  }
-
-  const chartData = data.map(item => ({
-    name: item.name,
-    score: Math.round(item.score * 100)
-  }));
+export default function AnalysisChart({ data, barColor = '#4F46E5' }) {
+  if (!data || data.length === 0) return (
+    <div className="h-full w-full flex items-center justify-center text-gray-400 text-sm">
+      데이터가 없습니다
+    </div>
+  );
 
   return (
-    <div className="w-full h-64">
+    <div className="w-full h-full min-h-[200px]">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
-          data={chartData}
+          data={data}
           layout="vertical"
-          margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
+          margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
         >
-          <XAxis type="number" domain={[0, 100]} hide />
-          <YAxis 
-            dataKey="name" 
-            type="category" 
-            axisLine={false} 
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
+          <XAxis type="number" domain={[0, 1]} hide />
+          <YAxis
+            dataKey="name"
+            type="category"
+            width={80}
+            tick={{ fontSize: 11, fill: '#6B7280', fontWeight: 500 }}
+            axisLine={false}
             tickLine={false}
-            tick={{ fontSize: 12, fill: '#4B5563' }}
-            width={100}
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(239, 246, 255, 0.5)' }} />
-          <Bar dataKey="score" barSize={20}>
-            {chartData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={barColor || '#3B82F6'} />
+          <Tooltip
+            cursor={{ fill: '#F3F4F6' }}
+            contentStyle={{
+              borderRadius: '12px',
+              border: 'none',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+              padding: '8px 12px'
+            }}
+          />
+          <Bar
+            dataKey="score"
+            fill={barColor}
+            radius={[0, 4, 4, 0]}
+            barSize={20}
+            animationDuration={1500}
+          >
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={barColor} fillOpacity={0.8 + (entry.score * 0.2)} />
             ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
-  );
+  )
 }

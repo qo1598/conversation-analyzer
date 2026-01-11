@@ -18,7 +18,7 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
   const handleDrag = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    
+
     if (e.type === 'dragenter' || e.type === 'dragover') {
       setDragActive(true)
     } else if (e.type === 'dragleave') {
@@ -84,60 +84,60 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
       // 1단계: Supabase Storage에 파일 업로드
       console.log('1. Supabase에 파일 업로드 시작...')
       setUploadProgress(20);
-      
+
       const uploadResult = await fileAPI.uploadTempFile(file)
-      
+
       if (!uploadResult.success) {
         throw new Error(`파일 업로드 실패: ${uploadResult.error}`)
       }
-      
+
       setUploadedFilePath(uploadResult.data.path)
       setUploadProgress(40);
-      
+
       console.log('2. 파일 업로드 완료, 분석 API 호출...')
-      
+
       // 2단계: 분석 API 호출 (RID만 받기)
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           audioUrl: uploadResult.data.url,
           filePath: uploadResult.data.path
         })
       });
-      
+
       setUploadProgress(60);
-      
+
       if (!response.ok) {
         throw new Error(`서버 응답 오류: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data.status === 'processing' && data.rid) {
         console.log('3. 분석 요청 성공, RID:', data.rid);
-        
+
         // 3단계: 폴링으로 결과 확인
         const result = await pollForResults(data.rid, data.filePath);
-        
+
         setUploading(false);
         setUploadProgress(100);
 
         if (result) {
-          onAnalysisComplete(result);
+          onAnalysisComplete(result, file);
         } else {
           onError('분석 결과를 받지 못했습니다.');
         }
       } else {
         throw new Error(data.error || '분석 요청 실패');
       }
-      
+
     } catch (error) {
       setUploading(false);
       console.error('분석 오류:', error);
-      
+
       // 오류 발생 시 업로드된 파일 삭제
       if (uploadedFilePath) {
         try {
@@ -147,7 +147,7 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
           console.error('임시 파일 삭제 실패:', deleteError)
         }
       }
-      
+
       onError(error.message || '파일 분석 중 오류가 발생했습니다.');
     }
   }
@@ -156,47 +156,47 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
   const pollForResults = async (rid, filePath) => {
     const maxRetries = 30; // 최대 5분 대기
     const retryInterval = 10000; // 10초마다 확인
-    
+
     for (let i = 0; i < maxRetries; i++) {
       try {
         console.log(`결과 확인 중... (${i + 1}/${maxRetries})`);
-        
+
         // 진행률 업데이트 (60% ~ 95%)
         const progress = 60 + (i / maxRetries) * 35;
         setUploadProgress(Math.round(progress));
-        
+
         const response = await fetch(`/api/analyze-status?rid=${rid}&filePath=${filePath}`);
-        
+
         if (!response.ok) {
           throw new Error(`상태 확인 오류: ${response.status}`);
         }
-        
+
         const data = await response.json();
-        
+
         if (data.status === 'completed') {
           console.log('분석 완료!');
           return data;
         } else if (data.status === 'error') {
           throw new Error(data.error);
         }
-        
+
         // 아직 처리 중이면 대기
         if (i < maxRetries - 1) {
           await new Promise(resolve => setTimeout(resolve, retryInterval));
         }
-        
+
       } catch (error) {
         console.error('폴링 오류:', error);
         throw error;
       }
     }
-    
+
     throw new Error('분석 시간이 너무 오래 걸립니다. 더 짧은 파일을 사용해보세요.');
   }
-  
+
   return (
     <div className="w-full">
-      <div 
+      <div
         className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer mb-4
           ${dragActive ? 'border-blue-400 bg-blue-50' : 'border-gray-300'}
           ${file ? 'bg-green-50 border-green-300' : ''}
@@ -208,23 +208,23 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
         onDrop={handleDrop}
         onClick={() => !uploading && inputRef.current.click()}
       >
-        <input 
+        <input
           ref={inputRef}
-          type="file" 
+          type="file"
           accept="audio/*,.mp3,.wav,.m4a,.aac,.webm,.ogg"
           onChange={handleChange}
           className="hidden"
           disabled={uploading}
         />
-        
+
         {uploading ? (
           <div>
             <p className="text-blue-600 font-medium">
               {uploadProgress < 50 ? '파일 업로드 중...' : '음성 분석 중...'}
             </p>
             <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2 mb-1">
-              <div 
-                className="bg-blue-600 h-2.5 rounded-full" 
+              <div
+                className="bg-blue-600 h-2.5 rounded-full"
                 style={{ width: `${uploadProgress}%` }}
               ></div>
             </div>
@@ -241,12 +241,7 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
             <p className="text-gray-600">녹음 파일을 여기에 끌어다 놓거나 클릭하여 선택하세요</p>
             <p className="text-sm text-gray-500 mt-1">지원 형식: .mp3, .wav, .m4a, .aac</p>
             <p className="text-sm text-gray-500">최대 파일 크기: 50MB</p>
-            <div className="mt-3 p-3 bg-blue-50 rounded-md">
-              <p className="text-xs text-blue-600">
-                📱 <strong>iPhone 사용자</strong>: "파일" 앱을 통해 음성 메모를 먼저 내보낸 후 업로드하거나, 
-                음성 메모에서 공유 → 파일로 저장 후 선택해주세요.
-              </p>
-            </div>
+
           </div>
         )}
       </div>
@@ -256,7 +251,7 @@ export default function AudioUploader({ onAnalysisStart, onAnalysisComplete, onE
         disabled={!file || uploading}
         className={`w-full py-3 rounded-lg font-medium transition-colors
           ${file && !uploading
-            ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+            ? 'bg-blue-600 hover:bg-blue-700 text-white'
             : 'bg-gray-200 text-gray-500 cursor-not-allowed'}
         `}
       >
